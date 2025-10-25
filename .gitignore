@@ -1,0 +1,44 @@
+# 가상환경
+TA/
+venv/
+env/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 환경 변수
+.env
+
+# IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# YOLO 모델 파일 (용량이 크므로 제외)
+*.pt
+*.onnx
+*.tflite
+*.pth
+
+# 테스트 이미지/결과물
+test_images/
+results/
+output/
+*.jpg
+*.png
+*.mp4
+
+# 로그 파일
+*.log
+
