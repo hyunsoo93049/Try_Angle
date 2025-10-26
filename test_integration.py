@@ -19,7 +19,7 @@ depth_estimator = pipeline(
 print("✅ 모델 로딩 완료!\n")
 
 # 이미지 로드
-image_path = 'jot4.jpeg'
+image_path = '/Users/hyunsoo/try_angle/data/sample_images/jot4.jpg'
 image = cv2.imread(image_path)
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 h, w = image.shape[:2]
