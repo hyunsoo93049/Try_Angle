@@ -1,48 +1,21 @@
-absl-py==2.3.1
-attrs==25.4.0
-certifi==2025.10.5
-cffi==2.0.0
-charset-normalizer==3.4.4
-contourpy==1.3.2
-cycler==0.12.1
-filelock==3.20.0
-flatbuffers==25.9.23
-fonttools==4.60.1
-fsspec==2025.9.0
-idna==3.11
-jax==0.6.2
-jaxlib==0.6.2
-Jinja2==3.1.6
-kiwisolver==1.4.9
-MarkupSafe==3.0.3
-matplotlib==3.10.7
-mediapipe==0.10.21
-ml_dtypes==0.5.3
-mpmath==1.3.0
-networkx==3.4.2
-numpy==1.26.4
-opencv-contrib-python==4.11.0.86
+# 핵심 동작 패키지 (RTMPose + 딥러닝)
+ultralytics==8.3.221
+torch==2.9.0
+
+# 영상처리/포즈 추정 시각화
 opencv-python==4.11.0.86
-opt_einsum==3.4.0
-packaging==25.0
+numpy==1.26.4
+matplotlib==3.10.7
 pillow==12.0.0
-polars==1.34.0
-polars-runtime-32==1.34.0
-protobuf==4.25.8
-psutil==7.1.2
-pycparser==2.23
-pyparsing==3.2.5
-python-dateutil==2.9.0.post0
+
+# MediaPipe 연동 필요시 (얼굴/핸드/추가 키포인트 쓸 때만)
+mediapipe==0.10.21
+
+# 아래는 옵션 (특정 코드/함수 추가시만 필요한 라이브러리)
 PyYAML==6.0.3
 requests==2.32.5
-scipy==1.15.3
-sentencepiece==0.2.1
-six==1.17.0
-sounddevice==0.5.3
-sympy==1.14.0
-torch==2.9.0
-torchvision==0.24.0
-typing_extensions==4.15.0
-ultralytics==8.3.221
-ultralytics-thop==2.0.17
-urllib3==2.5.0
+python-dateutil==2.9.0.post0
+
+# (import 안 하거나 코드에 직접 안 쓰면 삭제 가능)
+#opencv-contrib-python==4.11.0.86  ← opencv-python만으로 충분하면 삭제 가능
+#torchvision==0.24.0                ← TorchVision 기능 안 쓰면 삭제
