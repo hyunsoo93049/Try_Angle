@@ -1,44 +1,89 @@
-# 가상환경
+# =========================================
+# 🧠 TryAngle Project .gitignore (Final)
+# =========================================
+
+# ---- 1️⃣ 가상환경 / 환경 설정 ----
 TA/
 venv/
 env/
+.env
+.Python
 
-# Python 캐시
+# ---- 2️⃣ Python 캐시 / 빌드 ----
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
+*.egg-info/
+build/
+dist/
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# 환경 변수
-.env
-
-# IDE 설정
+# ---- 3️⃣ IDE / 편집기 설정 ----
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# macOS
+# ---- 4️⃣ OS / 기타 ----
 .DS_Store
+Thumbs.db
 
-# YOLO 모델 파일 (용량이 크므로 제외)
+# ---- 5️⃣ Jupyter Notebook ----
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ---- 6️⃣ 로그 / 임시파일 ----
+*.log
+*.tmp
+*.bak
+
+# ---- 7️⃣ 대용량 모델 파일 (YOLO 등) ----
 *.pt
 *.onnx
 *.tflite
 *.pth
 
-# 테스트 이미지/결과물
+# ---- 8️⃣ 데이터 관련 (이미지, CSV, Parquet, NPZ 등) ----
+data/
+datasets/
+features/
+**/npz_shards/
+**/parquet_shards/
+**/cluster_samples_visual/
+**/cluster_previews_openclip/
+**/*.parquet
+**/*.npz
+**/*.csv
+**/*.jpg
+**/*.jpeg
+**/*.png
+**/*.mp4
+**/*.avi
+
+# ---- 9️⃣ 테스트 및 출력 결과 ----
 test_images/
 results/
 output/
-*.jpg
-*.png
-*.mp4
+outputs/
+cluster_outputs/
+visual_output/
+test_image.jpg
 
-# 로그 파일
-*.log
+# ---- 🔟 문서 / 산출물 ----
+*.pdf
+*.docx
+*.pptx
+*.zip
+*.tar
+*.gz
 
+# ---- 11️⃣ 백업 / 캐시 ----
+*.old
+*.orig
+*.cache
+
+# ---- ✅ 예외 처리 (이건 반드시 포함할 것) ----
+!src/
+!src/**
+!Multi/version2/features/
+!Multi/version2/features/**
