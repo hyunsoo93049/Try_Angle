@@ -85,5 +85,5 @@ test_image.jpg
 # ---- ✅ 예외 처리 (이건 반드시 포함할 것) ----
 !src/
 !src/**
-!Multi/version2/features/
-!Multi/version2/features/**
+
+
