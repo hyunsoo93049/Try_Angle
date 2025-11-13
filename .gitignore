@@ -1,75 +1,99 @@
 # =========================================
-# 🧠 TryAngle Project .gitignore (Final)
+# 🚫 TryAngle — Large File Protection .gitignore (Safe Mode)
 # =========================================
 
-# ---- 1️⃣ 가상환경 / 환경 설정 ----
-TA/
-venv/
-env/
-.env
-.Python
-
-# ---- 2️⃣ Python 캐시 / 빌드 ----
+# ---- 1) Python / Environment ----
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.egg-info/
-build/
-dist/
+env/
+venv/
+TA/
+.Python
+.env
 
-# ---- 3️⃣ IDE / 편집기 설정 ----
+# ---- 2) OS / Editor temp ----
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# ---- 4️⃣ OS / 기타 ----
-.DS_Store
-Thumbs.db
-
-# ---- 5️⃣ Jupyter Notebook ----
+# ---- 3) Jupyter ----
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# ---- 6️⃣ 로그 / 임시파일 ----
+# ---- 4) Logs & Temp ----
 *.log
 *.tmp
 *.bak
+*.cache
+*.old
+*.orig
 
-# ---- 7️⃣ 대용량 모델 파일 (YOLO 등) ----
+# ============================================================
+# 🚨 중요: 업로드 금지 대용량 파일들 (절대 Git에 들어가면 안 됨)
+# ============================================================
+
+# ---- (A) YOLO / ML Model weight files (절대 금지!) ----
 *.pt
+*.pth
 *.onnx
 *.tflite
-*.pth
+*.engine
+*.ckpt
 
-# ---- 8️⃣ 데이터 관련 (이미지, CSV, Parquet, NPZ 등) ----
+# ---- (B) AI Feature / Embedding Files ----
+# (TryAngle의 특징 값 저장 파일들 — 매우 큰 데이터)
+*.npz
+*.npy
+*.pickle
+*.pkl
+*.parquet
+
+# ---- (C) 원본 데이터 폴더 전체 차단 ----
 data/
 datasets/
 features/
+**/features/
 **/npz_shards/
 **/parquet_shards/
-**/cluster_samples_visual/
-**/cluster_previews_openclip/
-**/*.parquet
-**/*.npz
-**/*.csv
+
+# ---- (D) 고해상도 이미지 자동 생성 산출물 차단 ----
 **/*.jpg
 **/*.jpeg
 **/*.png
-**/*.mp4
-**/*.avi
+**/*.bmp
+**/*.tiff
 
-# ---- 9️⃣ 테스트 및 출력 결과 ----
-test_images/
+# ---- (E) 영상 파일 단일 업로드 금지 ----
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# ============================================================
+# 🚫 TryAngle에서 자주 생성하는 시각화/결과물 폴더 통째로 무시
+# ============================================================
+cluster_outputs/
+cluster_samples_visual/
+cluster_previews_openclip/
+visual_output/
 results/
 output/
 outputs/
-cluster_outputs/
-visual_output/
-test_image.jpg
+test_images/
+test_videos/
+preview/
 
-# ---- 🔟 문서 / 산출물 ----
+# ---- 개발 중 생길 수 있는 자동 결과물 ----
+test_image.jpg
+*.gif
+
+# ---- 문서/패키지 ----
 *.pdf
 *.docx
 *.pptx
@@ -77,13 +101,8 @@ test_image.jpg
 *.tar
 *.gz
 
-# ---- 11️⃣ 백업 / 캐시 ----
-*.old
-*.orig
-*.cache
-
-# ---- ✅ 예외 처리 (이건 반드시 포함할 것) ----
+# ============================================================
+# 🟢 Allow — Only ‘src/’ 폴더와 Python 코드만 Git에서 관리
+# ============================================================
 !src/
 !src/**
-
-
