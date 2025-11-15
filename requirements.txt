@@ -1,0 +1,42 @@
+# =========================================
+# TryAngle v3 - Python Requirements
+# Python 3.10+ (Windows & macOS)
+# =========================================
+
+# Core Dependencies
+numpy>=1.24.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+pyyaml>=6.0
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Computer Vision & AI
+ultralytics>=8.0.0
+mediapipe>=0.10.0
+timm>=0.9.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+pandas>=2.0.0
+umap-learn>=0.5.3
+
+# Clustering & Embeddings
+hdbscan>=0.8.0
+
+# Image Processing
+imageio>=2.31.0
+
+# Utilities
+tqdm>=4.65.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: For training/development
+# jupyterlab>=4.0.0
+# notebook>=7.0.0
+
+# Note: Install these separately if needed:
+# - CLIP: pip install git+https://github.com/openai/CLIP.git
