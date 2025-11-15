@@ -26,6 +26,9 @@ umap-learn>=0.5.3
 # Clustering & Embeddings
 hdbscan>=0.8.0
 
+# CLIP for image-text embeddings
+git+https://github.com/openai/CLIP.git
+
 # Image Processing
 imageio>=2.31.0
 
@@ -37,6 +40,3 @@ seaborn>=0.12.0
 # Optional: For training/development
 # jupyterlab>=4.0.0
 # notebook>=7.0.0
-
-# Note: Install these separately if needed:
-# - CLIP: pip install git+https://github.com/openai/CLIP.git
