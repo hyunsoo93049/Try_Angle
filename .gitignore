@@ -61,12 +61,14 @@ Thumbs.db
 data/clustered_images/
 data/original_images/
 data/train/
+data/train_images/
 data/validation/
 features/
 feature_models/
 models/
 weights/
 checkpoints/
+clusters/
 
 # ---- (D) 자동 생성 결과물 폴더 ----
 cluster_outputs/
@@ -88,9 +90,11 @@ preview/
 *.zip
 *.rar
 *.7z
+*.tar.gz
 
-# Git LFS로 관리되는 모델 압축 파일은 허용
-# *.tar.gz는 주석 처리 (Git LFS 사용)
+# ---- (G) 기타 제외 파일 ----
+*.pdf
+.claude/
 
 # ============================================================
 # 🟢 예외: Git에 올릴 파일들
