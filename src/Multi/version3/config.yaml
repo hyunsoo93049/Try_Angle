@@ -12,7 +12,7 @@ paths:
   test_images_dir: ../../../data/test_images
 
   # 기본 레퍼런스 이미지
-  default_reference: test3.jpg
+  default_reference: test1.jpeg
 
 # 카메라 설정
 camera:

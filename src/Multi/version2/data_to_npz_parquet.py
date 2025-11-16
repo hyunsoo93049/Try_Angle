@@ -11,6 +11,11 @@ import pandas as pd
 from PIL import Image, UnidentifiedImageError
 from tqdm import tqdm
 import gc
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # -------- 모델 임포트 --------
 import clip
@@ -127,12 +132,12 @@ def save_chunk(records, chunk_idx, parq_dir, npz_dir):
 
 # -------- 메인 파이프라인 --------
 def main():
-    data_dir = r"C:\try_angle\data\train_images"  # ✅ 실제 경로
-    save_dir = r"C:\try_angle\features"
+    data_dir = PROJECT_ROOT / "data" / "train_images"  # ✅ 실제 경로
+    save_dir = PROJECT_ROOT / "features"
     os.makedirs(save_dir, exist_ok=True)
-    
-    parq_dir = os.path.join(save_dir, "parquet_shards")
-    npz_dir = os.path.join(save_dir, "npz_shards")
+
+    parq_dir = save_dir / "parquet_shards"
+    npz_dir = save_dir / "npz_shards"
     os.makedirs(parq_dir, exist_ok=True)
     os.makedirs(npz_dir, exist_ok=True)
 

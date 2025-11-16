@@ -8,18 +8,26 @@ import sys
 import numpy as np
 import polars as pl
 from tqdm import tqdm
+from pathlib import Path
 
 # feature_extractor_v2 import
 # training 폴더에서 상위로 가서 feature_extraction으로
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+VERSION3_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = VERSION3_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
+
 from feature_extraction.feature_extractor_v2 import extract_features_v2
 
 # ============================================================
 # 경로 설정
 # ============================================================
-IMG_DIR = r"C:\try_angle\data\train_images"
-EXISTING_PARQUET = r"C:\try_angle\feature_models\features\fusion_final_with_openclip.parquet"
-OUTPUT_PARQUET = r"C:\try_angle\feature_models\features\fusion_features_v2.parquet"
+IMG_DIR = PROJECT_ROOT / "data" / "train_images"
+EXISTING_PARQUET = PROJECT_ROOT / "feature_models" / "features" / "fusion_final_with_openclip.parquet"
+OUTPUT_PARQUET = PROJECT_ROOT / "feature_models" / "features" / "fusion_features_v2.parquet"
 
 # ============================================================
 # Main
@@ -47,15 +55,15 @@ def main():
     failed_count = 0
     
     for filename in tqdm(filenames, desc="Processing"):
-        img_path = os.path.join(IMG_DIR, filename)
+        img_path = IMG_DIR / filename
         
-        if not os.path.exists(img_path):
+        if not img_path.exists():
             print(f"\n⚠️ Image not found: {filename}")
             failed_count += 1
             continue
         
         try:
-            feat = extract_features_v2(img_path)
+            feat = extract_features_v2(str(img_path))
             
             if feat is None:
                 print(f"\n❌ Feature extraction failed: {filename}")
@@ -112,7 +120,7 @@ def main():
     # --------------------------------------------------------
     print(f"\n💾 Saving to: {OUTPUT_PARQUET}")
     
-    os.makedirs(os.path.dirname(OUTPUT_PARQUET), exist_ok=True)
+    os.makedirs(OUTPUT_PARQUET.parent, exist_ok=True)
     df.write_parquet(OUTPUT_PARQUET)
     
     print("✅ Parquet saved successfully!")

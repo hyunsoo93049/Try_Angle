@@ -18,13 +18,18 @@ from sklearn.metrics import (
 )
 from datetime import datetime
 import time
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # ============================================================
 # 설정
 # ============================================================
-INPUT_PARQUET = r"C:\try_angle\feature_models\features\fusion_features_v2.parquet"
-OUTPUT_DIR = r"C:\try_angle\feature_models"
-RESULTS_FILE = os.path.join(OUTPUT_DIR, "optimization_results.json")
+INPUT_PARQUET = PROJECT_ROOT / "feature_models" / "features" / "fusion_features_v2.parquet"
+OUTPUT_DIR = PROJECT_ROOT / "feature_models"
+RESULTS_FILE = OUTPUT_DIR / "optimization_results.json"
 
 # ============================================================
 # 탐색 공간

@@ -5,10 +5,21 @@
 
 import os
 import sys
+from pathlib import Path
 
 # 경로 설정
-sys.path.append(r"C:\try_angle\src\Multi\version3")
-sys.path.append(r"C:\try_angle\src\Multi\version3\analysis")
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+VERSION3_DIR = PROJECT_ROOT / "src" / "Multi" / "version3"
+ANALYSIS_DIR = VERSION3_DIR / "analysis"
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
+if str(ANALYSIS_DIR) not in sys.path:
+    sys.path.append(str(ANALYSIS_DIR))
 
 from analysis.image_comparator import ImageComparator
 
@@ -21,29 +32,29 @@ def main():
     # ==========================================
     # 이미지 경로 설정
     # ==========================================
-    #reference_path = r"C:\try_angle\data\clustered_images\cluster_5\IMG_0561.JPG"
-    reference_path = r"C:\try_angle\data\test_images\test3.jpg"
-    user_path = r"C:\try_angle\data\test_images\test4.jpg"
+    #reference_path = PROJECT_ROOT / "data" / "clustered_images" / "cluster_5" / "IMG_0561.JPG"
+    reference_path = PROJECT_ROOT / "data" / "test_images" / "test3.jpg"
+    user_path = PROJECT_ROOT / "data" / "test_images" / "test4.jpg"
     
     # 경로 확인
-    if not os.path.exists(reference_path):
+    if not reference_path.exists():
         print(f"❌ 레퍼런스 이미지를 찾을 수 없습니다: {reference_path}")
         return
     
     
-    if not os.path.exists(user_path):
+    if not user_path.exists():
         print(f"❌ 사용자 이미지를 찾을 수 없습니다: {user_path}")
         return
     
     print("\n" + "🎯 TryAngle - 촬영 피드백 시스템".center(60, "="))
-    print(f"레퍼런스: {os.path.basename(reference_path)}")
-    print(f"사용자  : {os.path.basename(user_path)}")
+    print(f"레퍼런스: {reference_path.name}")
+    print(f"사용자  : {user_path.name}")
     
     try:
         # ==========================================
         # 이미지 비교
         # ==========================================
-        comparator = ImageComparator(reference_path, user_path)
+        comparator = ImageComparator(str(reference_path), str(user_path))
         
         # ==========================================
         # 우선순위 피드백 받기

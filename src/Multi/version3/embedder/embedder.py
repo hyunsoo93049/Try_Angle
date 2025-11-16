@@ -6,13 +6,16 @@ import os
 import joblib
 import numpy as np
 import sys
+from pathlib import Path
 
 # Model cache
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+current_dir = Path(__file__).parent
+sys.path.append(str(current_dir.parent))
 from utils.model_cache import model_cache
 
-# 모델 저장 경로
-FEATURE_MODEL_DIR = r"C:\try_angle\feature_models"
+# 모델 저장 경로 (상대 경로)
+# embedder.py -> version3 -> Multi -> src -> Try_Angle
+FEATURE_MODEL_DIR = current_dir.parent.parent.parent.parent / "feature_models"
 
 SCALER_CLIP_PATH      = os.path.join(FEATURE_MODEL_DIR, "scaler_clip.joblib")
 SCALER_OPENCLIP_PATH  = os.path.join(FEATURE_MODEL_DIR, "scaler_openclip.joblib")

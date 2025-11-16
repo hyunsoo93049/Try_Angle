@@ -6,6 +6,11 @@
 import cv2
 import numpy as np
 from typing import Optional, Dict
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 
 class LightingAnalyzer:
@@ -463,10 +468,10 @@ def compare_lighting(ref_lighting: Dict, user_lighting: Dict) -> Dict:
 # 테스트
 # ============================================================
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
-
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
+    
     try:
-        analyzer = LightingAnalyzer(test_img)
+        analyzer = LightingAnalyzer(str(test_img))
         result = analyzer.analyze_all()
 
         print("\n" + "="*60)

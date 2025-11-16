@@ -6,13 +6,18 @@ import numpy as np
 import psutil
 import polars as pl
 from typing import Optional, Any
+from pathlib import Path
 
 # ---- 설정 ----
-BASE_DIR = r"C:\try_angle\src\Multi\version2\features"
-CSV_PATH = r"C:\try_angle\features\clip_dino_midas_features.csv"
-TMP_PARQDIR = os.path.join(BASE_DIR, "tmp_parquet_chunks")
-FINAL_PARQ = os.path.join(BASE_DIR, "clip_dino_midas_features.parquet")
-NPZ_DIR = os.path.join(BASE_DIR, "npz_shards")
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+BASE_DIR = PROJECT_ROOT / "src" / "Multi" / "version2" / "features"
+CSV_PATH = PROJECT_ROOT / "features" / "clip_dino_midas_features.csv"
+TMP_PARQDIR = BASE_DIR / "tmp_parquet_chunks"
+FINAL_PARQ = BASE_DIR / "clip_dino_midas_features.parquet"
+NPZ_DIR = BASE_DIR / "npz_shards"
 BATCH_SIZE = 50  # 💡 자동 resume 시 안전한 배치 크기
 
 
@@ -80,7 +85,7 @@ def save_chunk_atomic(df: pl.DataFrame, chunk_id: int, parquet_path: str, npz_pa
 def cleanup_temp_files():
     """임시파일 정리"""
     for pattern in ["*.tmp", "*.tmp.npz"]:
-        for p in glob.glob(os.path.join(NPZ_DIR, pattern)):
+        for p in glob.glob(os.path.join(str(NPZ_DIR), pattern)):
             try:
                 os.remove(p)
             except:
@@ -95,7 +100,7 @@ def show_memory():
 
 def find_resume_point():
     """마지막으로 완성된 청크 다음 인덱스를 반환"""
-    npz_files = sorted(glob.glob(os.path.join(NPZ_DIR, "shard_*.npz")))
+    npz_files = sorted(glob.glob(os.path.join(str(NPZ_DIR), "shard_*.npz")))
     if not npz_files:
         return 0
     last_file = npz_files[-1]

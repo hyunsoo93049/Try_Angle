@@ -1,6 +1,15 @@
 # Debug pose comparison
 import sys
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+from pathlib import Path
+
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+VERSION3_DIR = CURRENT_DIR
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
 
 from analysis.pose_analyzer import PoseAnalyzer, compare_poses
 import json
@@ -10,20 +19,20 @@ print("Pose Comparison Debug")
 print("="*60)
 
 # Test images
-ref_path = r"C:\try_angle\data\test_images\test2.jpg"
-user_path = r"C:\try_angle\data\test_images\test1.jpg"
+ref_path = PROJECT_ROOT / "data" / "test_images" / "test2.jpg"
+user_path = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
 
 # Analyze poses
 analyzer = PoseAnalyzer()
 
 print("\n[1] Analyzing Reference Image (test2.jpg)")
-ref_pose = analyzer.analyze(ref_path)
+ref_pose = analyzer.analyze(str(ref_path))
 print(f"    Scenario: {ref_pose['scenario']}")
 print(f"    Confidence: {ref_pose['confidence']:.2f}")
 print(f"    YOLO keypoints: {len(ref_pose['yolo_keypoints'])}")
 
 print("\n[2] Analyzing User Image (test1.jpg)")
-user_pose = analyzer.analyze(user_path)
+user_pose = analyzer.analyze(str(user_path))
 print(f"    Scenario: {user_pose['scenario']}")
 print(f"    Confidence: {user_pose['confidence']:.2f}")
 print(f"    YOLO keypoints: {len(user_pose['yolo_keypoints'])}")

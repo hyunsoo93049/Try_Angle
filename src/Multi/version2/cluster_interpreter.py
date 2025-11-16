@@ -10,12 +10,17 @@ import cv2
 from collections import Counter
 from ultralytics import YOLO
 from tqdm import tqdm
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # ------------------------------------------------------
 # [1] 경로 설정
 # ------------------------------------------------------
-PARQUET_PATH = r"C:\try_angle\features\clustered_umap_v2_result.parquet"
-IMG_DIR = r"C:\try_angle\data\train_images"
+PARQUET_PATH = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
+IMG_DIR = PROJECT_ROOT / "data" / "train_images"
 YOLO_WEIGHTS = "yolov8s-pose.pt"
 
 # ------------------------------------------------------
@@ -205,7 +210,7 @@ def analyze_cluster_comprehensive(cluster_id):
     
     # 파일 경로 리스트
     image_paths = [
-        os.path.join(IMG_DIR, os.path.basename(fname))
+        str(IMG_DIR / os.path.basename(fname))
         for fname in cluster_df["filename"].to_list()
     ]
     
@@ -328,7 +333,7 @@ def main():
     
     # 결과 저장 (선택사항)
     import json
-    output_path = r"C:\try_angle\features\cluster_interpretation.json"
+    output_path = PROJECT_ROOT / "features" / "cluster_interpretation.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
     print(f"\n💾 결과 저장: {output_path}")
@@ -343,4 +348,4 @@ if __name__ == "__main__":
 ## 💾 저장 방법
 
 #파일명: cluster_interpreter.py
-#위치: C:\try_angle\src\Multi\version2\
+#위치: <프로젝트 루트>/src/Multi/version2/

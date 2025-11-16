@@ -13,6 +13,11 @@ from ultralytics import YOLO
 from PIL import Image
 from composition_module import analyze_composition
 from feedback_module import generate_feedback
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # ---------------------------------------------------------
 # 모델 초기화
@@ -26,11 +31,11 @@ print("✅ 모델 로딩 완료")
 # ---------------------------------------------------------
 # 경로 설정
 # ---------------------------------------------------------
-ref_path = "C:/try_angle/data/sample_images/cafe1.jpg"
-tgt_path = "C:/try_angle/data/sample_images/cafe5.jpg"
+ref_path = PROJECT_ROOT / "data" / "sample_images" / "cafe1.jpg"
+tgt_path = PROJECT_ROOT / "data" / "sample_images" / "cafe5.jpg"
 
-ref_img = cv2.imread(ref_path)
-tgt_img = cv2.imread(tgt_path)
+ref_img = cv2.imread(str(ref_path))
+tgt_img = cv2.imread(str(tgt_path))
 if ref_img is None or tgt_img is None:
     raise FileNotFoundError("이미지 경로 확인 필요")
 

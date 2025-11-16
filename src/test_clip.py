@@ -9,13 +9,18 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms
 from sklearn.metrics.pairwise import cosine_similarity
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # 🔸 CLIP 모델 로드 (ViT-B/32 사용)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device)
 
 # 🔸 레퍼런스 이미지 로딩 및 전처리
-REFERENCE_PATH = 'C:/try_angle/data/sample_images/test1.jpg'
+REFERENCE_PATH = PROJECT_ROOT / "data" / "sample_images" / "test1.jpg"
 ref_img_pil = Image.open(REFERENCE_PATH).convert("RGB")
 ref_preprocessed = preprocess(ref_img_pil).unsqueeze(0).to(device)
 

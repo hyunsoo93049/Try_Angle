@@ -4,8 +4,13 @@
 
 import numpy as np
 import polars as pl
+from pathlib import Path
 
-PARQUET_PATH = r"C:\try_angle\features\clustered_umap_v2_result.parquet"
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+PARQUET_PATH = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
 
 df = pl.read_parquet(PARQUET_PATH)
 
@@ -67,6 +72,6 @@ print("="*60)
 print("라벨은 같지만, 고차원 특징 공간에서는 명확히 다릅니다.")
 print("주요 차이는 CLIP/OpenCLIP/DINO의 의미적/구조적 패턴입니다.")
 print("\n실제 이미지를 직접 비교해보세요:")
-print(f"  Cluster 2: C:\\try_angle\\clusters\\cluster_02\\")
-print(f"  Cluster 5: C:\\try_angle\\clusters\\cluster_05\\")
+print(f"  Cluster 2: {PROJECT_ROOT / 'clusters' / 'cluster_02'}")
+print(f"  Cluster 5: {PROJECT_ROOT / 'clusters' / 'cluster_05'}")
 print("="*60)

@@ -1,6 +1,14 @@
 # Test integrated system with pose analysis
 import sys
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+from pathlib import Path
+
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.append(str(CURRENT_DIR))
 
 print("="*60)
 print("Integrated System Test - ImageAnalyzer + ImageComparator")
@@ -13,14 +21,14 @@ try:
     print("\n✓ Modules imported successfully\n")
 
     # Test paths
-    ref_path = r"C:\try_angle\data\test_images\test1.jpg"
-    user_path = r"C:\try_angle\data\test_images\test1.jpg"  # Same image for testing
+    ref_path = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
+    user_path = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"  # Same image for testing
 
     print("="*60)
     print("Test 1: ImageAnalyzer with Pose")
     print("="*60)
 
-    analyzer = ImageAnalyzer(ref_path, enable_pose=True)
+    analyzer = ImageAnalyzer(str(ref_path), enable_pose=True)
     result = analyzer.analyze()
 
     print(f"\nCluster: {result['cluster']['cluster_label']}")
@@ -40,7 +48,7 @@ try:
     print("Test 2: ImageComparator with Pose Comparison")
     print("="*60)
 
-    comparator = ImageComparator(ref_path, user_path)
+    comparator = ImageComparator(str(ref_path), str(user_path))
     feedback = comparator.get_prioritized_feedback()
 
     print("\nFeedback (Top 5):")

@@ -4,6 +4,11 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # 🔸 MediaPipe pose 초기화 (정지 이미지용 + 실시간용 각각 설정)
 mp_pose = mp.solutions.pose
@@ -12,8 +17,8 @@ predictor = mp_pose.Pose(static_image_mode=False, model_complexity=1, min_detect
 mp_drawing = mp.solutions.drawing_utils
 
 # 🔸 레퍼런스 이미지 로딩 및 포즈 추출
-REFERENCE_PATH = 'C:/try_angle/data/sample_images/test1.jpg'
-ref_img = cv2.imread(REFERENCE_PATH)  # 이미지 읽기
+REFERENCE_PATH = PROJECT_ROOT / "data" / "sample_images" / "test1.jpg"
+ref_img = cv2.imread(str(REFERENCE_PATH))  # 이미지 읽기
 ref_rgb = cv2.cvtColor(ref_img, cv2.COLOR_BGR2RGB)  # BGR -> RGB 변환
 ref_result = pose_estimator.process(ref_rgb)  # 포즈 추론 수행
 

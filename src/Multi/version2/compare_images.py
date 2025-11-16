@@ -17,6 +17,11 @@ from emotion_module import EmotionAnalyzer
 from dino_module import dino_similarity
 from midas_module import camera_height_diff
 import os
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 
 # ---------------------------------------------------------
@@ -253,13 +258,13 @@ def main(ref_path, tgt_path, yolo_weights="yolov8s-pose.pt"):
 # 실행
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    default_ref = "C:/try_angle/data/sample_images/1.jpg"
-    default_tgt = "C:/try_angle/data/sample_images/2.jpg"
+    default_ref = PROJECT_ROOT / "data" / "sample_images" / "1.jpg"
+    default_tgt = PROJECT_ROOT / "data" / "sample_images" / "2.jpg"
     
-    if not os.path.exists(default_ref) or not os.path.exists(default_tgt):
+    if not default_ref.exists() or not default_tgt.exists():
         print("⚠️ 기본 이미지 경로 확인 필요.")
         print(f"   레퍼런스: {default_ref}")
         print(f"   타겟: {default_tgt}")
     else:
-        main(default_ref, default_tgt)
+        main(str(default_ref), str(default_tgt))
         

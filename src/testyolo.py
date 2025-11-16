@@ -1,13 +1,18 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # 모델 불러오기
 model = YOLO("yolo11n-pose.pt")
 
 # 이미지 로드
-path = r"C:\try_angle\data\sample_images\jott3.jpeg"
-results = model(path, device='cuda', conf=0.5, imgsz=960)[0]
+path = PROJECT_ROOT / "data" / "sample_images" / "jott3.jpeg"
+results = model(str(path), device='cuda', conf=0.5, imgsz=960)[0]
 
 # COCO keypoint 연결 관계
 SKELETON_COCO = [

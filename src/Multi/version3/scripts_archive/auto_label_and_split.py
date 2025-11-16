@@ -5,14 +5,19 @@ import numpy as np
 import polars as pl
 from collections import Counter
 from colorsys import rgb_to_hsv
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # ============================
 # 설정
 # ============================
-FEATURE_PARQUET = r"C:\try_angle\feature_models\features\fusion_features_v2.parquet"
-CLUSTER_LABELS_NPY = r"C:\try_angle\feature_models\feature_models_v3\cluster_labels.npy"
-IMAGE_DIR = r"C:\try_angle\data\train_images"
-OUTPUT_CLUSTER_DIR = r"C:\try_angle\clusters"
+FEATURE_PARQUET = PROJECT_ROOT / "feature_models" / "features" / "fusion_features_v2.parquet"
+CLUSTER_LABELS_NPY = PROJECT_ROOT / "feature_models" / "feature_models_v3" / "cluster_labels.npy"
+IMAGE_DIR = PROJECT_ROOT / "data" / "train_images"
+OUTPUT_CLUSTER_DIR = PROJECT_ROOT / "clusters"
 
 # 🔥 최적 설정 (Auto Optimizer 결과)
 K = 20
@@ -226,7 +231,7 @@ print("\n📁 Splitting images into cluster folders...")
 cluster_info = {}
 
 for c in range(n_clusters):
-    cluster_folder = os.path.join(OUTPUT_CLUSTER_DIR, f"cluster_{c:02d}")
+    cluster_folder = OUTPUT_CLUSTER_DIR / f"cluster_{c:02d}"
     os.makedirs(cluster_folder, exist_ok=True)
     
     cluster_df = df.filter(pl.col("cluster") == c)
@@ -241,7 +246,7 @@ for c in range(n_clusters):
     }
     
     # 설명 파일 저장
-    desc_file = os.path.join(cluster_folder, "cluster_description.txt")
+    desc_file = cluster_folder / "cluster_description.txt"
     with open(desc_file, "w", encoding="utf-8") as f:
         f.write(f"Cluster {c}\n")
         f.write(f"="*40 + "\n")
@@ -257,8 +262,8 @@ for c in range(n_clusters):
     # 이미지 복사
     copied = 0
     for fname in cluster_files:
-        src = os.path.join(IMAGE_DIR, fname)
-        dst = os.path.join(cluster_folder, fname)
+        src = IMAGE_DIR / fname
+        dst = cluster_folder / fname
         
         if os.path.exists(src):
             shutil.copyfile(src, dst)
@@ -270,7 +275,7 @@ for c in range(n_clusters):
 # ============================
 # 3) 전체 summary 저장
 # ============================
-summary_path = os.path.join(OUTPUT_CLUSTER_DIR, "cluster_summary.json")
+summary_path = OUTPUT_CLUSTER_DIR / "cluster_summary.json"
 
 summary_data = {
     "metadata": {

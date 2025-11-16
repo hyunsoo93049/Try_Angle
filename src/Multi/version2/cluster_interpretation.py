@@ -9,13 +9,18 @@ import numpy as np
 import polars as pl
 from tqdm import tqdm
 from ultralytics import YOLO
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # -----------------------------
 # [1] 경로 설정
 # -----------------------------
-PARQUET_PATH = r"C:\try_angle\features\clustered_umap_v2_result.parquet"
-IMG_DIR = r"C:\try_angle\data\train_images"
-OUTPUT_JSON = r"C:\try_angle\features\cluster_interpretation.json"
+PARQUET_PATH = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
+IMG_DIR = PROJECT_ROOT / "data" / "train_images"
+OUTPUT_JSON = PROJECT_ROOT / "features" / "cluster_interpretation.json"
 YOLO_WEIGHTS = "yolov8s-pose.pt"
 
 # -----------------------------
@@ -112,8 +117,8 @@ for cid in unique_clusters:
     sample_files = file_list[:50]
 
     for fname in tqdm(sample_files):
-        path = os.path.join(IMG_DIR, os.path.basename(fname))
-        img = cv2.imread(path)
+        path = IMG_DIR / os.path.basename(fname)
+        img = cv2.imread(str(path))
         if img is None:
             continue
 
