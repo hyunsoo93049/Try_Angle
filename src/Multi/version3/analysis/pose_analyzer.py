@@ -471,7 +471,7 @@ def compare_poses(ref_pose: Dict, user_pose: Dict) -> Dict:
     }
 
 
-def _compare_angles(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.3) -> Dict:
+def _compare_angles(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.5) -> Dict:
     """주요 관절 각도 비교"""
     angles = {}
 
@@ -599,26 +599,26 @@ def _generate_pose_feedback(angle_diffs: Dict, position_diffs: Dict,
     """구체적인 포즈 피드백 생성"""
     feedback = []
 
-    # 각도 피드백
-    if 'left_elbow' in angle_diffs and abs(angle_diffs['left_elbow']) > 15:
+    # 각도 피드백 (임계값 높여서 안정화)
+    if 'left_elbow' in angle_diffs and abs(angle_diffs['left_elbow']) > 25:  # 15 -> 25
         if angle_diffs['left_elbow'] > 0:
             feedback.append(f"왼팔 팔꿈치를 {abs(angle_diffs['left_elbow']):.0f}도 더 펴세요")
         else:
             feedback.append(f"왼팔 팔꿈치를 {abs(angle_diffs['left_elbow']):.0f}도 더 구부리세요")
 
-    if 'right_elbow' in angle_diffs and abs(angle_diffs['right_elbow']) > 15:
+    if 'right_elbow' in angle_diffs and abs(angle_diffs['right_elbow']) > 25:  # 15 -> 25
         if angle_diffs['right_elbow'] > 0:
             feedback.append(f"오른팔 팔꿈치를 {abs(angle_diffs['right_elbow']):.0f}도 더 펴세요")
         else:
             feedback.append(f"오른팔 팔꿈치를 {abs(angle_diffs['right_elbow']):.0f}도 더 구부리세요")
 
-    if 'left_shoulder' in angle_diffs and abs(angle_diffs['left_shoulder']) > 20:
+    if 'left_shoulder' in angle_diffs and abs(angle_diffs['left_shoulder']) > 30:  # 20 -> 30
         if angle_diffs['left_shoulder'] > 0:
             feedback.append(f"왼팔을 {abs(angle_diffs['left_shoulder']):.0f}도 더 올리세요")
         else:
             feedback.append(f"왼팔을 {abs(angle_diffs['left_shoulder']):.0f}도 더 내리세요")
 
-    if 'right_shoulder' in angle_diffs and abs(angle_diffs['right_shoulder']) > 20:
+    if 'right_shoulder' in angle_diffs and abs(angle_diffs['right_shoulder']) > 30:  # 20 -> 30
         if angle_diffs['right_shoulder'] > 0:
             feedback.append(f"오른팔을 {abs(angle_diffs['right_shoulder']):.0f}도 더 올리세요")
         else:
