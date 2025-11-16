@@ -6,15 +6,43 @@
 
 ## 📝 현재 작업 컨텍스트 (⚠️ 최신 업데이트만 유지 - 이전 내용은 덮어쓰기)
 
-### 👤 작성자: Claude Code
-### 📅 날짜: 2025-11-16 13:54 (KST) - macOS 이전 완료 + 실행 스크립트 추가
+### 👤 작성자: Claude Code (Sonnet 4.5)
+### 📅 날짜: 2025-11-16 16:58 (KST) - 맥북에서 인수인계 완료
 
 **📌 프로젝트 현황**:
 TryAngle v3 - AI 사진 촬영 가이드 시스템
-- **완성도**: 약 95% (크로스 플랫폼 지원 완료) ⬆️
-- **상태**: Windows + macOS 모두 프로덕션 준비 완료 ✅
-- **환경**: Windows (C:\try_angle) + macOS (/Users/hyunsoo/Try_Angle)
-- **다음 단계**: 실제 촬영 테스트 및 피드백 검증
+- **Python 백엔드**: 95% 완료 (크로스 플랫폼 지원 완료)
+- **FastAPI 서버**: 구축 완료 (iOS 연동 준비 완료)
+- **iOS 앱**: 0% (다음 단계)
+- **상태**: macOS 환경에서 개발 준비 완료 ✅
+
+**✅ 완료된 작업 (통합)**:
+1. **Python 백엔드** (Windows → macOS 이전 완료)
+   - 크로스 플랫폼 지원 (Windows + macOS)
+   - 실행 스크립트 추가 (run_camera.sh, run_camera.bat)
+   - 모델 파일 검증 완료
+
+2. **FastAPI 백엔드 서버** (Windows에서 작성)
+   - backend/main.py - iOS 연동 API
+   - backend/requirements.txt - FastAPI 패키지
+   - 실시간 분석 엔드포인트 구현
+   - 피드백 분류 (사용자 행동 / 자동 조정)
+
+3. **플랫폼 전환 결정**
+   - 안드로이드 → iOS 전용 개발로 변경
+   - 로컬 서버 방식 (개발) → 온디바이스 변환 (추후)
+
+**🎯 다음 단계 (iOS 앱 개발)**:
+1. Xcode로 iOS 프로젝트 생성
+2. 카메라 권한 및 실시간 촬영 UI 구현
+3. FastAPI 서버와 연동 (이미지 업로드)
+4. 실시간 피드백 표시 UI
+5. 테스트 및 최적화
+
+**📁 주요 파일 위치**:
+- Python 백엔드: `/Users/hyunsoo/Try_Angle/src/Multi/version3/`
+- FastAPI 서버: `/Users/hyunsoo/Try_Angle/backend/main.py`
+- 모델 파일: `/Users/hyunsoo/Try_Angle/feature_models/`
 
 ---
 
