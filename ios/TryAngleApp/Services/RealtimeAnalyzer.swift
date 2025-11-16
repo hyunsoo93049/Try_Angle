@@ -213,8 +213,7 @@ class RealtimeAnalyzer: ObservableObject {
 
         for fb in feedback {
             if let current = fb.currentValue,
-               let target = fb.targetValue,
-               let tolerance = fb.tolerance {
+               let target = fb.targetValue {
                 let diff = abs(current - target)
                 let maxDiff = max(abs(target) + 50, 100.0)  // 최대 차이
                 let itemScore = max(0.0, 1.0 - (diff / maxDiff))

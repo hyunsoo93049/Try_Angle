@@ -298,13 +298,6 @@ struct ContentView: View {
                 }
             }
 
-            // 완벽 상태 감지 시 자동 촬영
-            .onChange(of: realtimeAnalyzer.isPerfect) { isPerfect in
-                if isPerfect && autoCapture && capturedImage == nil {
-                    performCapture()
-                }
-            }
-
             // 5. 하단 컨트롤
             VStack {
                 Spacer()
@@ -374,6 +367,11 @@ struct ContentView: View {
 
                     Spacer()
                 }
+            }
+        }
+        .onChange(of: realtimeAnalyzer.isPerfect) { isPerfect in
+            if isPerfect && autoCapture && capturedImage == nil {
+                performCapture()
             }
         }
     }
