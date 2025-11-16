@@ -101,52 +101,85 @@ async def analyze_realtime(
 
 def extract_user_feedback(comparison: dict) -> list:
     """
-    사용자가 직접 행동할 수 있는 피드백만 추출
-    (포즈, 거리, 구도, 프레이밍)
+    서버에서는 포즈 피드백만 제공
+    (프레이밍, 구도는 클라이언트에서 실시간 처리)
     """
     feedback = []
 
-    # 1. 포즈 (최우선)
+    # 포즈 피드백만 처리 (서버의 주요 역할)
     pose = comparison["pose_comparison"]
-    if pose["available"] and pose["feedback"]:
-        for fb in pose["feedback"][:3]:  # 상위 3개만
-            if fb != "✅ 포즈가 적절합니다":
-                feedback.append({
-                    "priority": 1,
-                    "icon": "👤",
-                    "message": fb,
-                    "category": "pose"
-                })
-
-    # 2. 거리
-    depth = comparison["depth_comparison"]
-    if depth["action"] != "none":
-        feedback.append({
-            "priority": 2,
-            "icon": "📏",
-            "message": depth["feedback"],
-            "category": "distance"
-        })
-
-    # 3. 구도
-    comp = comparison["composition_comparison"]
-    tilt_diff = comp["tilt_diff"]
-    if abs(tilt_diff) > 3:
-        direction = "왼쪽" if tilt_diff > 0 else "오른쪽"
-        feedback.append({
-            "priority": 3,
-            "icon": "📐",
-            "message": f"휴대폰을 {abs(tilt_diff):.0f}도 {direction}으로 기울이세요",
-            "category": "composition"
-        })
-
-    # 4. 프레이밍 (줌)
     if pose["available"]:
-        ref_bbox = comparison.get("pose_comparison", {}).get("bbox")
-        user_bbox = comparison.get("pose_comparison", {}).get("bbox")
-        # 줌 관련 피드백 추가 가능
+        # 포즈 피드백 안정화를 위해 더 엄격한 조건 적용
+        if pose.get("similarity", 0) < 0.8:  # 80% 미만일 때만 피드백
+            # 각도 차이 분석
+            angle_diffs = pose.get("angle_differences", {})
+            position_diffs = pose.get("position_differences", {})
 
-    return feedback[:5]  # 최대 5개
+            # 가장 큰 차이가 나는 부분 찾기
+            major_issues = []
+
+            for joint, diff in angle_diffs.items():
+                if abs(diff) > 15:  # 15도 이상 차이날 때만
+                    major_issues.append({
+                        "joint": joint,
+                        "diff": diff,
+                        "type": "angle"
+                    })
+
+            # 상위 2개 문제만 피드백
+            major_issues.sort(key=lambda x: abs(x["diff"]), reverse=True)
+
+            for i, issue in enumerate(major_issues[:2]):
+                if issue["type"] == "angle":
+                    joint_name = translate_joint_name(issue["joint"])
+                    direction = "더 올리세요" if issue["diff"] > 0 else "더 내리세요"
+
+                    feedback.append({
+                        "priority": i + 1,
+                        "icon": "👤",
+                        "message": f"{joint_name} {direction}",
+                        "category": "pose",
+                        "currentValue": 0,
+                        "targetValue": abs(issue["diff"]),
+                        "tolerance": 5,
+                        "unit": "도"
+                    })
+
+        # 피드백이 있으면 원본 피드백도 추가 (텍스트만)
+        elif pose["feedback"]:
+            for i, fb in enumerate(pose["feedback"][:2]):
+                if "적절합니다" not in fb:
+                    feedback.append({
+                        "priority": i + 3,
+                        "icon": "💡",
+                        "message": fb,
+                        "category": "pose",
+                        "currentValue": None,
+                        "targetValue": None,
+                        "tolerance": None,
+                        "unit": None
+                    })
+
+    return feedback[:3]  # 포즈 피드백만 최대 3개
+
+
+def translate_joint_name(joint: str) -> str:
+    """영문 관절명을 한글로 번역"""
+    translations = {
+        "left_shoulder": "왼쪽 어깨",
+        "right_shoulder": "오른쪽 어깨",
+        "left_elbow": "왼쪽 팔꿈치",
+        "right_elbow": "오른쪽 팔꿈치",
+        "left_wrist": "왼쪽 손목",
+        "right_wrist": "오른쪽 손목",
+        "left_hip": "왼쪽 엉덩이",
+        "right_hip": "오른쪽 엉덩이",
+        "left_knee": "왼쪽 무릎",
+        "right_knee": "오른쪽 무릎",
+        "left_ankle": "왼쪽 발목",
+        "right_ankle": "오른쪽 발목"
+    }
+    return translations.get(joint, joint)
 
 
 def extract_camera_settings(comparison: dict) -> dict:
