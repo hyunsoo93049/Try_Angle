@@ -8,7 +8,19 @@ from typing import List, Dict
 
 # ImageAnalyzer import
 import sys
-sys.path.append(r"C:\try_angle\src\Multi\version3\analysis")
+from pathlib import Path
+
+ANALYSIS_DIR = Path(__file__).resolve().parent
+VERSION3_DIR = ANALYSIS_DIR.parent
+PROJECT_ROOT = VERSION3_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
+if str(ANALYSIS_DIR) not in sys.path:
+    sys.path.append(str(ANALYSIS_DIR))
+
 from image_analyzer import ImageAnalyzer
 
 # Pose comparison
@@ -581,11 +593,11 @@ class ImageComparator:
 # 테스트
 # ============================================================
 if __name__ == "__main__":
-    ref_path = r"C:\try_angle\data\test_images\test1.jpg"
-    user_path = r"C:\try_angle\data\test_images\test1.jpg"  # 같은 이미지로 테스트
+    ref_path = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
+    user_path = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"  # 같은 이미지로 테스트
     
     try:
-        comparator = ImageComparator(ref_path, user_path)
+        comparator = ImageComparator(str(ref_path), str(user_path))
         feedback = comparator.get_prioritized_feedback()
         
         print("\n" + "="*60)

@@ -10,6 +10,11 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # CLIP
 import clip
@@ -345,8 +350,8 @@ def extract_features_full(image_path: str):
 
 # 디버그용
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
-    feats = extract_features_full(test_img)
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
+    feats = extract_features_full(str(test_img))
     if feats is None:
         print("❌ Feature extraction failed")
     else:

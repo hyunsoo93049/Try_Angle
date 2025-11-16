@@ -9,9 +9,16 @@ import numpy as np
 import torch
 from PIL import Image
 import sys
+from pathlib import Path
 
 # Model cache
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+VERSION3_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = VERSION3_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
 from utils.model_cache import model_cache
 
 # 기존 모델
@@ -559,12 +566,12 @@ def extract_features_full_v2(image_path: str):
 # 테스트
 # ============================================================
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
     
     print(f"\n🔧 Testing Feature Extractor v2")
     print(f"Image: {test_img}")
     
-    result = extract_features_v2(test_img)
+    result = extract_features_v2(str(test_img))
     
     if result:
         print("\n✅ Feature Extraction Success!")

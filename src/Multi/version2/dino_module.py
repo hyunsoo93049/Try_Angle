@@ -10,6 +10,11 @@
 import torch
 from PIL import Image, ImageDraw
 import torchvision.transforms as T
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 print("🔹 Loading DINOv2 model (ViT-S/14) via torch.hub...")
 model = torch.hub.load("facebookresearch/dinov2", "dinov2_vits14", pretrained=True)
@@ -104,7 +109,7 @@ def dino_similarity(path1: str, path2: str,
 # 단독 테스트용
 # ---------------------------------------------------
 if __name__ == "__main__":
-    ref = "C:/try_angle/data/sample_images/cafe1.jpg"
-    tgt = "C:/try_angle/data/sample_images/cafe5.jpg"
-    sim = dino_similarity(ref, tgt)
+    ref = PROJECT_ROOT / "data" / "sample_images" / "cafe1.jpg"
+    tgt = PROJECT_ROOT / "data" / "sample_images" / "cafe5.jpg"
+    sim = dino_similarity(str(ref), str(tgt))
     print(f"DINO Tri-Path Similarity: {sim:.3f}")

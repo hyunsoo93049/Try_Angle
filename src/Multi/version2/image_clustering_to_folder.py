@@ -12,13 +12,18 @@ from collections import Counter
 from ultralytics import YOLO
 from tqdm import tqdm
 from datetime import datetime
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # ------------------------------------------------------
 # [1] 경로 설정
 # ------------------------------------------------------
-PARQUET_PATH = r"C:\try_angle\features\clustered_umap_v2_result.parquet"
-IMG_DIR = r"C:\try_angle\data\train_images"
-CLUSTER_DIR = r"C:\try_angle\data\clustered_images"
+PARQUET_PATH = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
+IMG_DIR = PROJECT_ROOT / "data" / "train_images"
+CLUSTER_DIR = PROJECT_ROOT / "data" / "clustered_images"
 YOLO_WEIGHTS = "yolov8s-pose.pt"
 
 # ------------------------------------------------------
@@ -332,7 +337,7 @@ def analyze_cluster_deep(cluster_id):
     cluster_size = len(cluster_df)
     
     image_paths = [
-        os.path.join(IMG_DIR, os.path.basename(fname))
+        str(IMG_DIR / os.path.basename(fname))
         for fname in cluster_df["filename"].to_list()
     ]
     
@@ -532,12 +537,12 @@ def main():
         analysis = analyze_cluster_deep(c)
         
         # JSON 저장
-        json_path = os.path.join(CLUSTER_DIR, f"cluster_{c}", "analysis.json")
+        json_path = CLUSTER_DIR / f"cluster_{c}" / "analysis.json"
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(analysis, f, ensure_ascii=False, indent=2, default=str)
         
         # TXT 리포트 저장
-        txt_path = os.path.join(CLUSTER_DIR, f"cluster_{c}", "README.txt")
+        txt_path = CLUSTER_DIR / f"cluster_{c}" / "README.txt"
         generate_txt_report(analysis, txt_path)
         
         print(f"✅ Cluster {c} 분석 완료")

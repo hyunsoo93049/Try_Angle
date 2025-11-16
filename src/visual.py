@@ -8,11 +8,28 @@ Camera Pose Assistant v2
 
 import cv2, math, numpy as np, mediapipe as mp
 from PIL import ImageFont, ImageDraw, Image
+from pathlib import Path
 
 # ---------------------------
 # 0. 설정
 # ---------------------------
-FONT_PATH = "C:/Windows/Fonts/NanumGothic.ttf"
+
+def _find_font_path() -> str:
+    candidates = [
+        Path(__file__).resolve().parent / "NanumGothic.ttf",
+        Path("/System/Library/Fonts/Supplemental/NanumGothic.ttc"),
+        Path("/Library/Fonts/NanumGothic.ttf"),
+        Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),
+        Path("/Library/Fonts/AppleGothic.ttf"),
+        Path("C:/Windows/Fonts/NanumGothic.ttf"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    raise FileNotFoundError("No suitable font found. Update FONT_PATH in visual.py.")
+
+
+FONT_PATH = _find_font_path()
 FONT_MAIN = ImageFont.truetype(FONT_PATH, 22)
 FONT_SMALL = ImageFont.truetype(FONT_PATH, 18)
 

@@ -8,6 +8,7 @@ import numpy as np
 import polars as pl
 import joblib
 import json
+from pathlib import Path
 from sklearn.preprocessing import RobustScaler
 from umap import UMAP
 from sklearn.cluster import KMeans
@@ -16,8 +17,12 @@ from sklearn.metrics import silhouette_score
 # ============================================================
 # 경로 설정
 # ============================================================
-INPUT_PARQUET = r"C:\try_angle\feature_models\features\fusion_features_v2.parquet"
-OUTPUT_DIR = r"C:\try_angle\feature_models\feature_models_v3"
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+INPUT_PARQUET = PROJECT_ROOT / "feature_models" / "features" / "fusion_features_v2.parquet"
+OUTPUT_DIR = PROJECT_ROOT / "feature_models" / "feature_models_v3"
 
 # 🔥 최적 K 설정
 K = 20   # <-- Auto Optimizer 결과

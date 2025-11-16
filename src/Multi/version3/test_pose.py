@@ -1,6 +1,14 @@
 # Test pose analyzer
 import sys
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+from pathlib import Path
+
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.append(str(CURRENT_DIR))
 
 print("Testing PoseAnalyzer...")
 
@@ -9,13 +17,13 @@ try:
     print("✓ PoseAnalyzer imported successfully")
 
     # Test with image
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
 
     print(f"\nAnalyzing: {test_img}")
     analyzer = PoseAnalyzer()
     print("✓ PoseAnalyzer initialized")
 
-    result = analyzer.analyze(test_img)
+    result = analyzer.analyze(str(test_img))
     print("✓ Analysis completed")
 
     print(f"\nScenario: {result['scenario']}")

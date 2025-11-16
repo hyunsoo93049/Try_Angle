@@ -7,10 +7,18 @@ import os
 import json
 import cv2
 import numpy as np
+from pathlib import Path
 
 # 기존 시스템 import
 import sys
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+
+VERSION3_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = VERSION3_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
 
 from feature_extraction.feature_extractor_v2 import extract_features_v2 as extract_features_full
 from matching.cluster_matcher import match_cluster_from_features
@@ -82,7 +90,7 @@ class ImageAnalyzer:
         # ==========================================
         # Step 3: 클러스터 특성 로드 (집단지성)
         # ==========================================
-        cluster_info_path = r"C:\try_angle\features\cluster_interpretation.json"
+        cluster_info_path = PROJECT_ROOT / "features" / "cluster_interpretation.json"
         with open(cluster_info_path, "r", encoding="utf-8") as f:
             cluster_info = json.load(f)
 
@@ -354,10 +362,10 @@ class ImageAnalyzer:
 # 테스트
 # ============================================================
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
     
     try:
-        analyzer = ImageAnalyzer(test_img)
+        analyzer = ImageAnalyzer(str(test_img))
         result = analyzer.analyze()
         
         print("\n" + "="*60)

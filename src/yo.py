@@ -3,6 +3,11 @@ from transformers import pipeline
 from PIL import Image
 import cv2
 import numpy as np
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 print("=== YOLO Seg + Pose + Depth 통합 ===\n")
 
@@ -19,8 +24,8 @@ depth_estimator = pipeline(
 print("✅ 모델 로딩 완료!\n")
 
 # 이미지 로드
-image_path = 'C:/try_angle/data/sample_images/p1.jpg'
-image = cv2.imread(image_path)
+image_path = PROJECT_ROOT / "data" / "sample_images" / "p1.jpg"
+image = cv2.imread(str(image_path))
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 h, w = image.shape[:2]
 

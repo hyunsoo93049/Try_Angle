@@ -1,6 +1,11 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # -----------------------------------------------------
 # 1️⃣ MediaPipe pose 초기화
@@ -18,8 +23,8 @@ pose = mp_pose.Pose(
 # -----------------------------------------------------
 # 2️⃣ 이미지 읽기
 # -----------------------------------------------------
-image_path = r"C:/try_angle/data/sample_images/jott1.jpeg"
-image = cv2.imread(image_path)
+image_path = PROJECT_ROOT / "data" / "sample_images" / "jott1.jpeg"
+image = cv2.imread(str(image_path))
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 # -----------------------------------------------------

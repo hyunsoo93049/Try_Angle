@@ -2,13 +2,18 @@ import os
 import json
 import numpy as np
 import polars as pl
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # ============================================================
 # 📌 1) 경로 설정
 # ============================================================
-PARQUET_PATH = r"C:\try_angle\features\clustered_umap_v2_result.parquet"
-INTERPRET_PATH = r"C:\try_angle\features\cluster_interpretation.json"
-CENTROID_PATH = r"C:\try_angle\features\cluster_centroids.json"
+PARQUET_PATH = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
+INTERPRET_PATH = PROJECT_ROOT / "features" / "cluster_interpretation.json"
+CENTROID_PATH = PROJECT_ROOT / "features" / "cluster_centroids.json"
 
 
 # ============================================================
@@ -125,10 +130,10 @@ if __name__ == "__main__":
         compute_and_save_centroids()
 
     # (2) 테스트 이미지로 실행
-    test_image = r"C:\try_angle\test_images\sample.jpg"  # ← 너가 넣고 싶은 이미지 경로
+    test_image = PROJECT_ROOT / "test_images" / "sample.jpg"  # ← 너가 넣고 싶은 이미지 경로
     print("✔ Running cluster prediction for:", test_image)
 
-    cid, dist, info = predict_cluster(test_image)
+    cid, dist, info = predict_cluster(str(test_image))
 
     print("\n📸 Prediction Result")
     print("----------------------------------------")

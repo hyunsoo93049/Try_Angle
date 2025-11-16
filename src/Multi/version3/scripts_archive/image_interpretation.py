@@ -9,6 +9,11 @@ import numpy as np
 import torch
 from PIL import Image
 from typing import Dict, List, Optional
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # 기존 feature extractor
 from feature_extraction.feature_extractor import extract_features_full
@@ -600,10 +605,10 @@ class ImageInterpretation:
 # ============================================================
 
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
     
     try:
-        interp = ImageInterpretation(test_img)
+        interp = ImageInterpretation(str(test_img))
         result = interp.analyze()
         
         print("\n" + "="*50)

@@ -7,9 +7,17 @@ import numpy as np
 import joblib
 import json
 import sys
+from pathlib import Path
 
 # Model cache
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+VERSION3_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = VERSION3_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
+
 from utils.model_cache import model_cache
 
 # 🔥 절대 import로만 구성 (가장 안정적)
@@ -19,11 +27,11 @@ from embedder.embedder import embed_features
 # =============================================
 # 1) 모델 경로 설정
 # =============================================
-FEATURE_MODEL_DIR = r"C:\try_angle\feature_models"
+FEATURE_MODEL_DIR = PROJECT_ROOT / "feature_models"
 
-KMEANS_MODEL_PATH   = os.path.join(FEATURE_MODEL_DIR, "kmeans_model.pkl")
-CENTROIDS_PATH      = os.path.join(FEATURE_MODEL_DIR, "kmeans_centroids.npy")
-CLUSTER_INFO_PATH   = os.path.join(FEATURE_MODEL_DIR, "cluster_info.json")
+KMEANS_MODEL_PATH   = FEATURE_MODEL_DIR / "kmeans_model.pkl"
+CENTROIDS_PATH      = FEATURE_MODEL_DIR / "kmeans_centroids.npy"
+CLUSTER_INFO_PATH   = FEATURE_MODEL_DIR / "cluster_info.json"
 
 # ---------------------------------------------------------
 # [2] 모델 로딩 (싱글톤)
@@ -104,8 +112,8 @@ def match_cluster_from_image(image_path):
 # [5] 테스트
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
-    result = match_cluster_from_image(test_img)
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
+    result = match_cluster_from_image(str(test_img))
 
     print("\n🎯 Prediction Result")
     print(result)

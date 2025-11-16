@@ -8,9 +8,17 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 import os
 import sys
+from pathlib import Path
 
 # Model cache
-sys.path.append(r"C:\try_angle\src\Multi\version3")
+VERSION3_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = VERSION3_DIR
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+if str(VERSION3_DIR) not in sys.path:
+    sys.path.append(str(VERSION3_DIR))
+
 from utils.model_cache import model_cache
 
 # YOLO
@@ -59,7 +67,7 @@ class PoseAnalyzer:
 
         # YOLO 모델 로드 (싱글톤 캐싱)
         if yolo_model_path is None:
-            yolo_model_path = r"C:\try_angle\src\Multi\version3\yolo11s-pose.pt"
+            yolo_model_path = VERSION3_DIR / "yolo11s-pose.pt"
 
         if not os.path.exists(yolo_model_path):
             raise FileNotFoundError(f"YOLO model not found: {yolo_model_path}")
@@ -664,11 +672,11 @@ def _generate_pose_feedback(angle_diffs: Dict, position_diffs: Dict,
 # 테스트
 # ============================================================
 if __name__ == "__main__":
-    test_img = r"C:\try_angle\data\test_images\test1.jpg"
-
+    test_img = PROJECT_ROOT / "data" / "test_images" / "test1.jpg"
+    
     try:
         analyzer = PoseAnalyzer()
-        result = analyzer.analyze(test_img)
+        result = analyzer.analyze(str(test_img))
 
         print("\n" + "="*60)
         print("🤸 POSE ANALYSIS RESULT")

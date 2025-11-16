@@ -23,6 +23,9 @@ Thumbs.db
 *.swo
 *~
 
+# ---- 2.1) External projects (archived) ----
+external_projects/
+
 # ---- 3) Jupyter ----
 .ipynb_checkpoints/
 *.ipynb_checkpoints

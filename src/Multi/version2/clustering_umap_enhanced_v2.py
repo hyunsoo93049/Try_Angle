@@ -19,15 +19,20 @@ from sklearn.metrics import silhouette_score
 
 from umap import UMAP
 import joblib
+from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
 # ------------------------------------------------------
 # [1] 경로 설정
 # ------------------------------------------------------
-PARQUET_PATH = r"C:\try_angle\features\fusion_final_with_openclip.parquet"
-IMG_DIR      = r"C:\try_angle\data\train_images"
-SAVE_DIR     = r"C:\try_angle\models_v2"
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
+
+PARQUET_PATH = PROJECT_ROOT / "features" / "fusion_final_with_openclip.parquet"
+IMG_DIR      = PROJECT_ROOT / "data" / "train_images"
+SAVE_DIR     = PROJECT_ROOT / "models_v2"
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 
@@ -208,8 +213,9 @@ sil = silhouette_score(fusion_128, labels_km, sample_size=min(5000, len(fusion_1
 print(f"\n🏆 Silhouette = {sil:.4f}")
 
 df = df.with_columns(pl.Series("cluster", labels_km))
-df.write_parquet(r"C:\try_angle\features\clustered_umap_v2_result.parquet")
+clustered_output = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
+df.write_parquet(clustered_output)
 
 print("\n🎉 클러스터링 완료!")
-print("   → clustered_umap_v2_result.parquet 저장됨")
+print(f"   → {clustered_output.name} 저장됨")
 print(f"   → 모델 디렉토리: {SAVE_DIR}")

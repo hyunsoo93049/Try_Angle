@@ -5,11 +5,16 @@
 import json
 import polars as pl
 import numpy as np
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+while PROJECT_ROOT != PROJECT_ROOT.parent and not ((PROJECT_ROOT / "data").exists() and (PROJECT_ROOT / "src").exists()):
+    PROJECT_ROOT = PROJECT_ROOT.parent
 
 # 경로
-CLUSTER_SUMMARY_PATH = r"C:\try_angle\clusters\cluster_summary.json"
-PARQUET_PATH = r"C:\try_angle\features\clustered_umap_v2_result.parquet"
-OUTPUT_PATH = r"C:\try_angle\features\cluster_interpretation.json"
+CLUSTER_SUMMARY_PATH = PROJECT_ROOT / "clusters" / "cluster_summary.json"
+PARQUET_PATH = PROJECT_ROOT / "features" / "clustered_umap_v2_result.parquet"
+OUTPUT_PATH = PROJECT_ROOT / "features" / "cluster_interpretation.json"
 
 print("📂 Loading data...")
 

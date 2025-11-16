@@ -13,6 +13,7 @@ import threading
 from queue import Queue, Empty
 from pathlib import Path
 import yaml
+from PIL import Image, ImageDraw, ImageFont
 
 # 프로젝트 루트 경로 자동 설정
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -133,6 +134,10 @@ class RealtimeCameraAnalyzer:
         self.color_priority_low = tuple(colors['priority_low'])
         self.color_info = tuple(colors['info'])
         self.color_success = tuple(colors['success'])
+
+        # 텍스트 렌더링 (PIL 사용: 한글 지원)
+        self.base_font_size = self.config.get('ui', 'base_font_size', default=36) or 36
+        self._init_text_renderer()
 
         # 임계값 (config에서 로드)
         self.thresholds = self.config.get('thresholds')
@@ -330,15 +335,18 @@ class RealtimeCameraAnalyzer:
         cv2.rectangle(overlay, (0, 0), (w, overlay_height), self.color_bg, -1)
         frame = cv2.addWeighted(frame, 0.7, overlay, 0.3, 0)
 
+        # PIL 이미지로 변환 (한글 렌더링용)
+        pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(pil_image)
+
         # 헤더
-        cv2.putText(
-            frame,
+        self._put_text(
+            draw,
             f"TryAngle - Realtime Guide | FPS: {self.fps:.1f} | Analysis: {self.analysis_count}",
-            (10, 30),
-            self.font,
-            self.font_scale,
+            (10, 20),
             self.color_text,
-            self.font_thickness
+            scale=self.font_scale,
+            thickness=self.font_thickness
         )
 
         # 피드백 표시
@@ -351,14 +359,13 @@ class RealtimeCameraAnalyzer:
             # 정보성 메시지
             if info_messages:
                 for fb in info_messages:
-                    cv2.putText(
-                        frame,
+                    self._put_text(
+                        draw,
                         f"  {fb['message']}",
                         (10, y_offset),
-                        self.font,
-                        self.font_scale * 0.9,
                         self.color_info,
-                        self.font_thickness - 1
+                        scale=self.font_scale * 0.9,
+                        thickness=max(1, self.font_thickness - 1)
                     )
                     y_offset += self.line_height
 
@@ -372,42 +379,124 @@ class RealtimeCameraAnalyzer:
                     else:
                         color = self.color_priority_low
 
-                    cv2.putText(
-                        frame,
+                    self._put_text(
+                        draw,
                         f"  {i}. [{fb['category']}] {fb['message']}",
                         (10, y_offset),
-                        self.font,
-                        self.font_scale,
                         color,
-                        self.font_thickness
+                        scale=self.font_scale,
+                        thickness=self.font_thickness
                     )
                     y_offset += self.line_height
             else:
-                cv2.putText(
-                    frame,
+                self._put_text(
+                    draw,
                     "  Perfect! No adjustments needed.",
                     (10, y_offset),
-                    self.font,
-                    self.font_scale,
                     self.color_success,
-                    self.font_thickness
+                    scale=self.font_scale,
+                    thickness=self.font_thickness
                 )
         else:
-            cv2.putText(
-                frame,
+            self._put_text(
+                draw,
                 "  Analyzing...",
                 (10, 60),
-                self.font,
-                self.font_scale,
                 self.color_info,
-                self.font_thickness
+                scale=self.font_scale,
+                thickness=self.font_thickness
             )
+
+        # PIL → OpenCV 변환
+        frame = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
         # 분석 중 표시
         if self.is_analyzing:
             cv2.circle(frame, (w - 30, 30), 10, (0, 0, 255), -1)
 
         return frame
+
+    def _init_text_renderer(self):
+        """한글 지원을 위한 폰트 로딩"""
+        config_font = self.config.get('ui', 'font_path', default=None)
+        font_candidates = []
+
+        if config_font:
+            font_candidates.append(config_font)
+
+        # OS별 기본 폰트 후보
+        if sys.platform == "darwin":
+            font_candidates.extend([
+                "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+                "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+                "/Library/Fonts/Apple SD Gothic Neo.ttc"
+            ])
+        elif sys.platform.startswith("win"):
+            font_candidates.extend([
+                r"C:\Windows\Fonts\malgun.ttf",
+                r"C:\Windows\Fonts\malgunsl.ttf",
+                r"C:\Windows\Fonts\gulim.ttc"
+            ])
+        else:
+            font_candidates.extend([
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+            ])
+
+        self._font_cache = {}
+        self._font_path = None
+
+        for path in font_candidates:
+            if not path:
+                continue
+            font_path = Path(path).expanduser()
+            if font_path.exists():
+                self._font_path = str(font_path)
+                break
+
+        if self._font_path is None:
+            print("⚠️ 한글 폰트를 찾지 못해 기본 폰트를 사용합니다. (config.yaml의 ui.font_path 설정 가능)")
+
+    def _get_pil_font(self, scale: float = 1.0):
+        """스케일에 맞는 PIL 폰트 캐시"""
+        scale_key = round(scale, 2)
+        if scale_key in self._font_cache:
+            return self._font_cache[scale_key]
+
+        font_size = max(12, int(self.base_font_size * scale))
+        try:
+            if self._font_path:
+                font = ImageFont.truetype(self._font_path, font_size)
+            else:
+                font = ImageFont.load_default()
+        except Exception:
+            font = ImageFont.load_default()
+
+        self._font_cache[scale_key] = font
+        return font
+
+    def _put_text(self, draw: ImageDraw.ImageDraw, text: str, position, color_bgr, scale: float = 1.0, thickness: Optional[int] = None):
+        """PIL 기반 텍스트 출력 (OpenCV 컬러 → RGB 변환)"""
+        font = self._get_pil_font(scale)
+        rgb_color = (int(color_bgr[2]), int(color_bgr[1]), int(color_bgr[0]))
+        # PIL stroke가 두꺼운 경우 번짐이 생기므로 살짝 줄여서 사용
+        base_thickness = self.font_thickness if thickness is None else thickness
+        stroke_width = max(0, base_thickness - 2)
+        stroke_kwargs = {}
+        if stroke_width > 0:
+            stroke_kwargs = {
+                "stroke_width": stroke_width,
+                "stroke_fill": rgb_color
+            }
+
+        draw.text(
+            position,
+            text,
+            font=font,
+            fill=rgb_color,
+            **stroke_kwargs
+        )
 
     def run(self):
         """

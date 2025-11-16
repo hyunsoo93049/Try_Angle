@@ -129,20 +129,29 @@ cd Try_Angle
 conda create -n TA python=3.10 -y
 conda activate TA
 
-# 3. 필수 패키지 설치
-pip install opencv-python numpy pillow pyyaml
-pip install torch torchvision
-pip install ultralytics mediapipe
-pip install scikit-learn pandas timm umap-learn
+# 3. 필수 패키지 설치 (간편 설치)
+pip install -r requirements.txt
 
-# 4. 모델 파일 다운로드 (Google Drive 또는 별도 제공)
-# - feature_models/
-# - features/
-# - data/test_images/
+# 또는 수동 설치:
+# pip install opencv-python numpy pillow pyyaml
+# pip install torch torchvision
+# pip install ultralytics mediapipe
+# pip install scikit-learn pandas timm umap-learn
 
-# 5. 실행
+# 4. 모델 파일 다운로드 및 압축 해제
+# Git LFS로 자동 다운로드:
+git lfs pull
+
+# 또는 수동 다운로드 (GitHub Releases):
+# - tryangle_models_complete.tar.gz 다운로드
+# - 압축 해제: tar -xzf tryangle_models_complete.tar.gz
+
+# 5. 실행 (간편 실행)
 cd src/Multi/version3
-python camera_realtime.py
+run_camera.bat
+
+# 또는 직접 실행:
+# python camera_realtime.py
 ```
 
 ### 🍎 설치 (macOS)
@@ -150,14 +159,17 @@ python camera_realtime.py
 **자세한 가이드**: [`MAC_SETUP.md`](src/Multi/version3/MAC_SETUP.md)
 
 ```bash
-# 1-3단계 동일
+# 1-4단계 Windows와 동일
 
-# 4. Apple Silicon 최적화 (M1/M2/M3)
+# 5. Apple Silicon 최적화 (M1/M2/M3/M4)
 # PyTorch MPS 자동 지원
 
-# 5. 실행
+# 6. 실행 (간편 실행)
 cd src/Multi/version3
-python camera_realtime.py
+./run_camera.sh
+
+# 또는 직접 실행:
+# python camera_realtime.py
 ```
 
 ### 🎮 조작법
@@ -179,6 +191,8 @@ Try_Angle/
 │   ├── camera_realtime.py           # 실시간 카메라 시스템
 │   ├── config.yaml                  # 크로스 플랫폼 설정
 │   ├── main_feedback.py             # 이미지 비교 피드백
+│   ├── run_camera.sh                # 🍎 macOS/Linux 실행 스크립트
+│   ├── run_camera.bat               # 🪟 Windows 실행 스크립트
 │   │
 │   ├── analysis/                    # 분석 모듈
 │   │   ├── image_analyzer.py        # 통합 분석기
