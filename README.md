@@ -11,7 +11,7 @@
 
 ---
 
-## 🎯 프로젝트 소개
+## 프로젝트 소개
 
 **TryAngle**은 사진 촬영 초보자도 전문가처럼 찍을 수 있도록 돕는 AI 기반 실시간 촬영 가이드 시스템입니다.
 
@@ -28,9 +28,9 @@
 
 ---
 
-## ✨ 주요 기능
+## 주요 기능
 
-### 🔍 11가지 분석 카테고리
+### 11가지 분석 카테고리
 
 | 카테고리 | 분석 내용 | 피드백 예시 |
 |---------|---------|------------|
@@ -46,7 +46,7 @@
 | 🖼️ **프레이밍** | 줌 비율 | "화면 1.3배 확대" |
 | ⚖️ **대칭성** | 좌우 균형 | "왼쪽으로 20% 이동" |
 
-### 🚀 핵심 기술
+### 핵심 기술
 
 ```mermaid
 graph LR
@@ -67,10 +67,10 @@ graph LR
 - **MiDaS**: Depth 추정
 - **UMAP**: 차원 축소 & 클러스터링
 
-**성능 최적화:**
-- ✅ **싱글톤 패턴**: 모델 한 번만 로드 (2배 속도 향상)
-- ✅ **비동기 분석**: 백그라운드 스레드로 UI 끊김 없음
-- ✅ **캐싱**: 두 번째 이미지부터 로딩 시간 0초
+*성능 최적화:*
+-  [글톤 패턴]: 모델 한 번만 로드 (2배 속도 향상)
+-  [비동기 분석]: 백그라운드 스레드로 UI 끊김 없음
+-  [캐싱]: 두 번째 이미지부터 로딩 시간 0초
 
 ---
 
@@ -93,11 +93,11 @@ graph LR
 ### 분석 결과 예시
 
 ```python
-📊 촬영 가이드
+ 촬영 가이드
 
-🎯 스타일: 실외 / 멀리, 쿨톤, 중간, 반신 ✓
+ 스타일: 실외 / 멀리, 쿨톤, 중간, 반신 ✓
 
-🎬 촬영 조정 사항:
+ 촬영 조정 사항:
    1. [DISTANCE] 2걸음 뒤로
       └ 거리 비율: 1.23
 
@@ -110,15 +110,15 @@ graph LR
 
 ---
 
-## 🛠️ 설치 및 실행
+## 설치 및 실행
 
-### 📋 요구사항
+### 요구사항
 
 - Python 3.10+
 - CUDA (GPU 사용 시, 선택)
 - 웹캠 또는 카메라
 
-### 🔧 설치 (Windows)
+### 설치 (Windows)
 
 ```bash
 # 1. 저장소 클론
@@ -145,7 +145,7 @@ cd src/Multi/version3
 python camera_realtime.py
 ```
 
-### 🍎 설치 (macOS)
+### 설치 (macOS)
 
 **자세한 가이드**: [`MAC_SETUP.md`](src/Multi/version3/MAC_SETUP.md)
 
@@ -160,7 +160,7 @@ cd src/Multi/version3
 python camera_realtime.py
 ```
 
-### 🎮 조작법
+###  조작법
 
 | 키 | 기능 |
 |----|------|
@@ -171,7 +171,7 @@ python camera_realtime.py
 
 ---
 
-## 📁 프로젝트 구조
+##  프로젝트 구조
 
 ```
 Try_Angle/
@@ -213,7 +213,7 @@ Try_Angle/
 
 ---
 
-## 🔬 기술 아키텍처
+## 기술 아키텍처
 
 ### 파이프라인
 
@@ -242,11 +242,11 @@ Try_Angle/
 
 **1. 상대적 평가 (Relative Evaluation)**
 ```python
-# ❌ 절대적 평가 (Before)
+# 절대적 평가 (Before)
 if blur < 100:
     feedback = "사진이 흐려요"
 
-# ✅ 상대적 평가 (After)
+# 상대적 평가 (After)
 if ref_blur < 100:  # 레퍼런스가 흐림 = 의도된 스타일
     priority = 8.0  # 낮은 우선순위
 else:
@@ -266,7 +266,7 @@ feedback.sort(key=lambda x: x["priority"])
 
 ---
 
-## 📊 성능
+##성능
 
 ### 분석 속도
 
@@ -288,7 +288,7 @@ feedback.sort(key=lambda x: x["priority"])
 
 ---
 
-## 🤝 기여
+## 협업
 
 프로젝트에 기여하고 싶으시다면:
 
@@ -300,42 +300,31 @@ feedback.sort(key=lambda x: x["priority"])
 
 ---
 
-## 📄 라이선스
+## 라이선스
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 👥 팀
+## 팀
 
 - **개발자**: [Your Name]
 - **AI 개발 지원**: Claude (Anthropic)
 
 ---
 
-## 📚 문서
+## 문서
 
-- [📖 Quick Reference](src/Multi/version3/QUICK_REFERENCE.md) - 빠른 시작 가이드
-- [🍎 Mac Setup](src/Multi/version3/MAC_SETUP.md) - macOS 설치 가이드
-- [📐 Design Doc](src/Multi/version3/DESIGN_QUALITY_LIGHTING.md) - 상세 설계 문서
-- [📝 Changelog](src/Multi/version3/CHANGELOG.md) - 변경 이력
+- [Quick Reference](src/Multi/version3/QUICK_REFERENCE.md) - 빠른 시작 가이드
+- [Mac Setup](src/Multi/version3/MAC_SETUP.md) - macOS 설치 가이드
+- [Design Doc](src/Multi/version3/DESIGN_QUALITY_LIGHTING.md) - 상세 설계 문서
+- [Changelog](src/Multi/version3/CHANGELOG.md) - 변경 이력
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [OpenAI CLIP](https://github.com/openai/CLIP) - Image feature extraction
 - [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) - Pose detection
 - [Google MediaPipe](https://google.github.io/mediapipe/) - Precise keypoint tracking
 - [Intel MiDaS](https://github.com/isl-org/MiDaS) - Depth estimation
-
----
-
-<div align="center">
-
-**Made with ❤️ and AI**
-
-[![Star](https://img.shields.io/github/stars/hyunsoo93049/Try_Angle?style=social)](https://github.com/hyunsoo93049/Try_Angle)
-[![Follow](https://img.shields.io/github/followers/hyunsoo93049?style=social)](https://github.com/hyunsoo93049)
-
-</div>
