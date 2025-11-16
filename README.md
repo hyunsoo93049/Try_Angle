@@ -307,9 +307,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 ## 팀
-
-- **개발자**: [Your Name]
-- **AI 개발 지원**: Claude (Anthropic)
+- 소속 : 중앙대학교 예술공학부
+- 기획 : [김현수]
+- UX/UI 디자인 : [최승혜, 김세영, 이윤균]
+- 카메라 개발 : [전은서]
+- 알고리즘 및 AI개발 : [김현수]
 
 ---
 
