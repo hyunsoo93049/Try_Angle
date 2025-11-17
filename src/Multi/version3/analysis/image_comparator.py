@@ -61,18 +61,24 @@ class ImageComparator:
     레퍼런스 vs 사용자 이미지 비교
     클러스터 정보 + 픽셀 분석 모두 활용
     """
-    
-    def __init__(self, reference_path: str, user_path: str):
+
+    def __init__(self, reference_path: str, user_path: str, use_movenet: bool = False):
+        """
+        Args:
+            reference_path: 레퍼런스 이미지 경로
+            user_path: 사용자 이미지 경로
+            use_movenet: True면 MoveNet 사용, False면 YOLO11 사용 (Phase 2-4)
+        """
         print("\n" + "="*60)
         print("📸 레퍼런스 이미지 분석")
         print("="*60)
-        self.ref_analyzer = ImageAnalyzer(reference_path)
+        self.ref_analyzer = ImageAnalyzer(reference_path, use_movenet=use_movenet)
         self.ref_data = self.ref_analyzer.analyze()
-        
+
         print("\n" + "="*60)
         print("📸 사용자 이미지 분석")
         print("="*60)
-        self.user_analyzer = ImageAnalyzer(user_path)
+        self.user_analyzer = ImageAnalyzer(user_path, use_movenet=use_movenet)
         self.user_data = self.user_analyzer.analyze()
         
     def compare(self) -> Dict:
