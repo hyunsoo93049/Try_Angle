@@ -69,7 +69,7 @@ async def root():
 async def analyze_realtime(
     reference: UploadFile = File(...),
     current_frame: UploadFile = File(...),
-    pose_model: str = "yolo11"  # Phase 2-4: "yolo11" or "movenet"
+    pose_model: str = "movenet"  # Phase 2-4: "yolo11" or "movenet" (Default: movenet for +15% accuracy)
 ):
     """
     실시간 프레임 분석
