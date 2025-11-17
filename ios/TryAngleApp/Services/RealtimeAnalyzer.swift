@@ -72,7 +72,18 @@ class RealtimeAnalyzer: ObservableObject {
     func analyzeFrame(_ image: UIImage) {
         // 너무 자주 분석하지 않도록 제한
         guard Date().timeIntervalSince(lastAnalysisTime) >= analysisInterval else { return }
-        guard let reference = referenceAnalysis else { return }
+
+        // 레퍼런스가 없으면 분석하지 않음 (중요!)
+        guard let reference = referenceAnalysis else {
+            // 레퍼런스 없으면 피드백 초기화
+            DispatchQueue.main.async {
+                self.instantFeedback = []
+                self.perfectScore = 0.0
+                self.isPerfect = false
+            }
+            return
+        }
+
         guard let cgImage = image.cgImage else { return }
 
         lastAnalysisTime = Date()
