@@ -63,7 +63,16 @@ class ImageAnalyzer:
     2) 측정 가능한 값들 추출 (비교용)
     """
     
-    def __init__(self, image_path: str, enable_pose: bool = True, enable_exif: bool = True, enable_quality: bool = True, enable_lighting: bool = True):
+    def __init__(self, image_path: str, enable_pose: bool = True, enable_exif: bool = True, enable_quality: bool = True, enable_lighting: bool = True, use_movenet: bool = False):
+        """
+        Args:
+            image_path: 이미지 파일 경로
+            enable_pose: 포즈 분석 활성화
+            enable_exif: EXIF 분석 활성화
+            enable_quality: 품질 분석 활성화
+            enable_lighting: 조명 분석 활성화
+            use_movenet: True면 MoveNet 사용, False면 YOLO11 사용 (Phase 2-4)
+        """
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"❌ Image not found: {image_path}")
 
@@ -72,6 +81,7 @@ class ImageAnalyzer:
         self.enable_exif = enable_exif and EXIF_AVAILABLE
         self.enable_quality = enable_quality and QUALITY_AVAILABLE
         self.enable_lighting = enable_lighting and LIGHTING_AVAILABLE
+        self.use_movenet = use_movenet  # Phase 2-4: MoveNet 옵션
 
         # ==========================================
         # Step 1: Feature 추출 (모든 모델 사용)
@@ -104,7 +114,10 @@ class ImageAnalyzer:
         self.pose_analyzer = None
         if self.enable_pose:
             try:
-                self.pose_analyzer = PoseAnalyzer()
+                # Phase 2-4: MoveNet 옵션 전달
+                self.pose_analyzer = PoseAnalyzer(use_movenet=self.use_movenet)
+                model_name = "MoveNet" if self.use_movenet else "YOLO11"
+                print(f"  ✅ PoseAnalyzer ready (using {model_name})")
             except Exception as e:
                 print(f"  ⚠️ PoseAnalyzer initialization failed: {e}")
                 self.enable_pose = False

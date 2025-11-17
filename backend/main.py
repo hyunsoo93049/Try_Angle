@@ -37,15 +37,24 @@ async def root():
 @app.post("/api/analyze/realtime")
 async def analyze_realtime(
     reference: UploadFile = File(...),
-    current_frame: UploadFile = File(...)
+    current_frame: UploadFile = File(...),
+    pose_model: str = "yolo11"  # Phase 2-4: "yolo11" or "movenet"
 ):
     """
     실시간 프레임 분석
 
     iOS에서 레퍼런스 이미지와 현재 프레임을 전송하면
     AI 분석 후 피드백을 반환
+
+    Args:
+        reference: 레퍼런스 이미지
+        current_frame: 현재 프레임
+        pose_model: 포즈 모델 선택 ("yolo11" 또는 "movenet")
     """
     start_time = time.time()
+
+    # Phase 2-4: MoveNet 옵션 설정
+    use_movenet = (pose_model.lower() == "movenet")
 
     # 임시 파일 저장
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as ref_temp:
@@ -60,9 +69,11 @@ async def analyze_realtime(
         print(f"\n📸 분석 시작...")
         print(f"   레퍼런스: {ref_path}")
         print(f"   현재 프레임: {frame_path}")
+        print(f"   포즈 모델: {pose_model.upper()}")  # Phase 2-4
 
         # TryAngle 분석 (기존 Python 코드 활용)
-        comparator = ImageComparator(ref_path, frame_path)
+        # Phase 2-4: MoveNet 옵션 전달
+        comparator = ImageComparator(ref_path, frame_path, use_movenet=use_movenet)
         comparison = comparator.compare()
 
         # 사용자 피드백 추출 (행동 가능한 것만)

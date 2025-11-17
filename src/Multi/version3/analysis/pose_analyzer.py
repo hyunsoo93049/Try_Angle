@@ -1,6 +1,6 @@
 # ============================================================
 # 🤸 TryAngle - Pose Analyzer
-# YOLO11-pose + MediaPipe 하이브리드 포즈 분석
+# Phase 2-3: YOLO11 / MoveNet + MediaPipe 하이브리드 포즈 분석
 # ============================================================
 
 import cv2
@@ -29,6 +29,14 @@ except ImportError:
     print("⚠️ ultralytics not installed. YOLO pose detection disabled.")
     YOLO_AVAILABLE = False
 
+# Phase 2-3: MoveNet 추가
+try:
+    from analysis.movenet_analyzer import MoveNetAnalyzer
+    MOVENET_AVAILABLE = True
+except ImportError:
+    print("⚠️ MoveNet not available. Install TensorFlow: pip install tensorflow==2.15.0")
+    MOVENET_AVAILABLE = False
+
 # MediaPipe
 try:
     import mediapipe as mp
@@ -40,44 +48,70 @@ except ImportError:
 
 class PoseAnalyzer:
     """
-    YOLO11-pose + MediaPipe 하이브리드 포즈 분석기
+    Phase 2-3: YOLO11 / MoveNet + MediaPipe 하이브리드 포즈 분석기
+
+    포즈 모델 선택:
+    - YOLO11: 범용 객체 검출 기반 (정확도 62.5%, 속도 45fps)
+    - MoveNet: 포즈 전문 모델 (정확도 77.6%, 속도 30fps) ⭐ 추천
 
     시나리오별 최적 모델 선택:
-    - 전신/뒷모습/옆모습/멀리: YOLO만
-    - 얼굴 클로즈업: YOLO + MediaPipe Face
-    - 손 제스처: YOLO + MediaPipe Hands
-    - 디테일 필요: YOLO + MediaPipe Pose
+    - 전신/뒷모습/옆모습/멀리: 포즈 모델만
+    - 얼굴 클로즈업: 포즈 모델 + MediaPipe Face
+    - 손 제스처: 포즈 모델 + MediaPipe Hands
+    - 디테일 필요: 포즈 모델 + MediaPipe Pose
     """
 
-    # YOLO 17개 키포인트 (COCO format)
-    YOLO_KEYPOINTS = [
+    # 17개 키포인트 (COCO format, YOLO & MoveNet 공통)
+    KEYPOINTS = [
         'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear',
         'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
         'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
         'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
     ]
 
-    def __init__(self, yolo_model_path: str = None):
+    def __init__(self, use_movenet: bool = False, yolo_model_path: str = None, movenet_model_path: str = None):
         """
+        Phase 2-3: MoveNet 지원 추가
+
         Args:
-            yolo_model_path: YOLO 모델 경로. None이면 기본 경로 사용
+            use_movenet: True면 MoveNet, False면 YOLO11 (기본값)
+            yolo_model_path: YOLO 모델 경로 (use_movenet=False일 때 사용)
+            movenet_model_path: MoveNet 모델 경로 (use_movenet=True일 때 사용)
         """
-        if not YOLO_AVAILABLE:
-            raise ImportError("ultralytics package required. Install: pip install ultralytics")
+        self.use_movenet = use_movenet
+        self.pose_model = None
 
-        # YOLO 모델 로드 (싱글톤 캐싱)
-        if yolo_model_path is None:
-            yolo_model_path = VERSION3_DIR / "yolo11s-pose.pt"
+        if use_movenet:
+            # MoveNet 사용
+            if not MOVENET_AVAILABLE:
+                raise ImportError(
+                    "MoveNet not available. Install TensorFlow: pip install tensorflow==2.15.0\n"
+                    "And download model: python scripts/download_movenet.py"
+                )
 
-        if not os.path.exists(yolo_model_path):
-            raise FileNotFoundError(f"YOLO model not found: {yolo_model_path}")
+            print("  🏃 Using MoveNet Thunder (정확도 우선)")
+            self.pose_model = MoveNetAnalyzer(model_path=movenet_model_path)
+            self.model_type = 'movenet'
 
-        # 싱글톤 패턴으로 YOLO 모델 로드
-        def load_yolo():
-            print(f"  🔧 Loading YOLO11-pose from {os.path.basename(yolo_model_path)}...")
-            return YOLO(yolo_model_path)
+        else:
+            # YOLO11 사용 (기존)
+            if not YOLO_AVAILABLE:
+                raise ImportError("ultralytics package required. Install: pip install ultralytics")
 
-        self.yolo = model_cache.get_or_load("yolo_pose", load_yolo)
+            if yolo_model_path is None:
+                yolo_model_path = VERSION3_DIR / "yolo11s-pose.pt"
+
+            if not os.path.exists(yolo_model_path):
+                raise FileNotFoundError(f"YOLO model not found: {yolo_model_path}")
+
+            # 싱글톤 패턴으로 YOLO 모델 로드
+            def load_yolo():
+                print(f"  🔧 Loading YOLO11-pose from {os.path.basename(yolo_model_path)}...")
+                return YOLO(yolo_model_path)
+
+            self.yolo = model_cache.get_or_load("yolo_pose", load_yolo)
+            self.pose_model = self.yolo
+            self.model_type = 'yolo'
 
         # MediaPipe 초기화 (lazy loading)
         self.mp_pose = None
@@ -119,18 +153,19 @@ class PoseAnalyzer:
 
     def analyze(self, image_path: str) -> Dict:
         """
-        이미지에서 포즈 추출 (시나리오 자동 판단)
+        Phase 2-3: 이미지에서 포즈 추출 (MoveNet / YOLO11 선택 가능)
 
         Returns:
             {
                 'scenario': 'full_body' | 'face_closeup' | 'hand_gesture' | 'back_view',
-                'yolo_keypoints': [...],
+                'yolo_keypoints': [...],  # 호환성 위해 이름 유지 (MoveNet도 동일 포맷)
                 'mediapipe_pose': [...] (optional),
                 'mediapipe_face': [...] (optional),
                 'mediapipe_hands': [...] (optional),
                 'merged_keypoints': {...},
                 'confidence': float,
-                'bbox': [x1, y1, x2, y2]
+                'bbox': [x1, y1, x2, y2],
+                'model_type': 'yolo' | 'movenet'
             }
         """
         if not os.path.exists(image_path):
@@ -141,10 +176,17 @@ class PoseAnalyzer:
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         h, w = img.shape[:2]
 
-        # Step 1: YOLO 실행 (항상)
-        yolo_result = self._run_yolo(img_rgb, h, w)
+        # Phase 2-3: MoveNet vs YOLO11 선택
+        if self.use_movenet:
+            # Step 1: MoveNet 실행
+            pose_result = self._run_movenet(image_path)
+        else:
+            # Step 1: YOLO 실행 (기존)
+            pose_result = self._run_yolo(img_rgb, h, w)
 
-        if yolo_result is None or yolo_result['confidence'] < 0.3:
+        # Phase 1-1: Threshold 최적화 (0.3 → 0.15)
+        # 측면 포즈, 얼굴 가린 포즈 등에서 검출률 향상
+        if pose_result is None or pose_result['confidence'] < 0.15:
             return {
                 'scenario': 'no_person',
                 'yolo_keypoints': None,
@@ -154,14 +196,15 @@ class PoseAnalyzer:
             }
 
         # Step 2: 시나리오 판단
-        scenario = self._detect_scenario(yolo_result, h, w)
+        scenario = self._detect_scenario(pose_result, h, w)
 
         # Step 3: 시나리오별 MediaPipe 추가 실행
         result = {
             'scenario': scenario,
-            'yolo_keypoints': yolo_result['keypoints'],
-            'yolo_confidence': yolo_result['confidence'],
-            'bbox': yolo_result['bbox']
+            'yolo_keypoints': pose_result['keypoints'],  # 호환성 위해 이름 유지
+            'yolo_confidence': pose_result['confidence'],
+            'bbox': pose_result['bbox'],
+            'model_type': self.model_type  # Phase 2-3: 사용된 모델 타입
         }
 
         if scenario == 'face_closeup' and MEDIAPIPE_AVAILABLE:
@@ -181,7 +224,7 @@ class PoseAnalyzer:
 
         # Step 4: 키포인트 병합
         result['merged_keypoints'] = self._merge_keypoints(result)
-        result['confidence'] = yolo_result['confidence']
+        result['confidence'] = pose_result['confidence']
 
         return result
 
@@ -219,15 +262,45 @@ class PoseAnalyzer:
                      float(boxes[2])/w, float(boxes[3])/h]
         }
 
-    def _detect_scenario(self, yolo_result: Dict, h: int, w: int) -> str:
+    def _run_movenet(self, image_path: str) -> Optional[Dict]:
+        """
+        MoveNet 포즈 검출
+
+        Args:
+            image_path: 이미지 파일 경로
+
+        Returns:
+            YOLO와 동일한 포맷의 결과
+            {
+                'keypoints': List[Dict],
+                'confidence': float,
+                'bbox': List[float]
+            }
+        """
+        try:
+            result = self.pose_model.analyze(image_path)
+
+            # MoveNet 결과는 이미 YOLO와 동일한 포맷
+            # (movenet_analyzer.py에서 호환 포맷으로 반환)
+            return {
+                'keypoints': result['keypoints'],
+                'confidence': result['confidence'],
+                'bbox': result['bbox']
+            }
+
+        except Exception as e:
+            print(f"⚠️ MoveNet analysis failed: {e}")
+            return None
+
+    def _detect_scenario(self, pose_result: Dict, h: int, w: int) -> str:
         """
         시나리오 자동 판단
 
         Returns:
             'full_body' | 'upper_body' | 'face_closeup' | 'hand_gesture' | 'back_view'
         """
-        bbox = yolo_result['bbox']
-        keypoints = yolo_result['keypoints']
+        bbox = pose_result['bbox']
+        keypoints = pose_result['keypoints']
 
         # bbox 크기
         bbox_width = bbox[2] - bbox[0]
@@ -471,8 +544,13 @@ def compare_poses(ref_pose: Dict, user_pose: Dict) -> Dict:
     }
 
 
-def _compare_angles(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.5) -> Dict:
-    """주요 관절 각도 비교"""
+def _compare_angles(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.25) -> Dict:
+    """
+    주요 관절 각도 비교
+
+    Phase 1-1: conf_threshold 최적화 (0.5 → 0.25)
+    낮은 confidence 키포인트도 활용하여 포즈 비교 정확도 향상
+    """
     angles = {}
 
     # 팔꿈치 각도 (왼쪽)
@@ -528,8 +606,12 @@ def _compare_angles(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.5) ->
     return angles
 
 
-def _compare_positions(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.3) -> Dict:
-    """주요 키포인트 상대 위치 비교"""
+def _compare_positions(ref_kp: Dict, user_kp: Dict, conf_threshold: float = 0.2) -> Dict:
+    """
+    주요 키포인트 상대 위치 비교
+
+    Phase 1-1: conf_threshold 최적화 (0.3 → 0.2)
+    """
     positions = {}
 
     # 손목 높이 비교
@@ -596,33 +678,91 @@ def _calculate_similarity(angle_diffs: Dict, position_diffs: Dict) -> float:
 
 def _generate_pose_feedback(angle_diffs: Dict, position_diffs: Dict,
                            ref_kp: Dict, user_kp: Dict) -> List[str]:
-    """구체적인 포즈 피드백 생성"""
+    """
+    Phase 1-3: 구체적인 포즈 피드백 생성 (현재 각도 + 목표 각도 표시)
+
+    기존: "왼팔 팔꿈치를 25도 더 펴세요"
+    개선: "왼팔 팔꿈치를 25도 더 펴세요 (현재 90°, 목표 115°)"
+    """
     feedback = []
 
     # 각도 피드백 (임계값 높여서 안정화)
     if 'left_elbow' in angle_diffs and abs(angle_diffs['left_elbow']) > 25:  # 15 -> 25
+        # 현재 각도 계산
+        current_angle = _calculate_angle(
+            user_kp['left_shoulder'], user_kp['left_elbow'], user_kp['left_wrist']
+        )
+        target_angle = _calculate_angle(
+            ref_kp['left_shoulder'], ref_kp['left_elbow'], ref_kp['left_wrist']
+        )
+
         if angle_diffs['left_elbow'] > 0:
-            feedback.append(f"왼팔 팔꿈치를 {abs(angle_diffs['left_elbow']):.0f}도 더 펴세요")
+            feedback.append(
+                f"왼팔 팔꿈치를 {abs(angle_diffs['left_elbow']):.0f}° 더 펴세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
         else:
-            feedback.append(f"왼팔 팔꿈치를 {abs(angle_diffs['left_elbow']):.0f}도 더 구부리세요")
+            feedback.append(
+                f"왼팔 팔꿈치를 {abs(angle_diffs['left_elbow']):.0f}° 더 구부리세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
 
     if 'right_elbow' in angle_diffs and abs(angle_diffs['right_elbow']) > 25:  # 15 -> 25
+        current_angle = _calculate_angle(
+            user_kp['right_shoulder'], user_kp['right_elbow'], user_kp['right_wrist']
+        )
+        target_angle = _calculate_angle(
+            ref_kp['right_shoulder'], ref_kp['right_elbow'], ref_kp['right_wrist']
+        )
+
         if angle_diffs['right_elbow'] > 0:
-            feedback.append(f"오른팔 팔꿈치를 {abs(angle_diffs['right_elbow']):.0f}도 더 펴세요")
+            feedback.append(
+                f"오른팔 팔꿈치를 {abs(angle_diffs['right_elbow']):.0f}° 더 펴세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
         else:
-            feedback.append(f"오른팔 팔꿈치를 {abs(angle_diffs['right_elbow']):.0f}도 더 구부리세요")
+            feedback.append(
+                f"오른팔 팔꿈치를 {abs(angle_diffs['right_elbow']):.0f}° 더 구부리세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
 
     if 'left_shoulder' in angle_diffs and abs(angle_diffs['left_shoulder']) > 30:  # 20 -> 30
+        current_angle = _calculate_angle(
+            user_kp['left_hip'], user_kp['left_shoulder'], user_kp['left_elbow']
+        )
+        target_angle = _calculate_angle(
+            ref_kp['left_hip'], ref_kp['left_shoulder'], ref_kp['left_elbow']
+        )
+
         if angle_diffs['left_shoulder'] > 0:
-            feedback.append(f"왼팔을 {abs(angle_diffs['left_shoulder']):.0f}도 더 올리세요")
+            feedback.append(
+                f"왼팔을 {abs(angle_diffs['left_shoulder']):.0f}° 더 올리세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
         else:
-            feedback.append(f"왼팔을 {abs(angle_diffs['left_shoulder']):.0f}도 더 내리세요")
+            feedback.append(
+                f"왼팔을 {abs(angle_diffs['left_shoulder']):.0f}° 더 내리세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
 
     if 'right_shoulder' in angle_diffs and abs(angle_diffs['right_shoulder']) > 30:  # 20 -> 30
+        current_angle = _calculate_angle(
+            user_kp['right_hip'], user_kp['right_shoulder'], user_kp['right_elbow']
+        )
+        target_angle = _calculate_angle(
+            ref_kp['right_hip'], ref_kp['right_shoulder'], ref_kp['right_elbow']
+        )
+
         if angle_diffs['right_shoulder'] > 0:
-            feedback.append(f"오른팔을 {abs(angle_diffs['right_shoulder']):.0f}도 더 올리세요")
+            feedback.append(
+                f"오른팔을 {abs(angle_diffs['right_shoulder']):.0f}° 더 올리세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
         else:
-            feedback.append(f"오른팔을 {abs(angle_diffs['right_shoulder']):.0f}도 더 내리세요")
+            feedback.append(
+                f"오른팔을 {abs(angle_diffs['right_shoulder']):.0f}° 더 내리세요 "
+                f"(현재 {current_angle:.0f}°, 목표 {target_angle:.0f}°)"
+            )
 
     # 얼굴 각도
     if 'face_angle' in angle_diffs and abs(angle_diffs['face_angle']) > 5:
