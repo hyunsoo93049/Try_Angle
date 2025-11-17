@@ -19,9 +19,18 @@ from PIL import Image, ImageDraw, ImageFont
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "analysis"))
+sys.path.insert(0, str(PROJECT_ROOT / "utils"))
 
 from analysis.image_analyzer import ImageAnalyzer
 from analysis.image_comparator import ImageComparator
+
+# Phase 3.3: Visual Guide Overlay
+try:
+    from utils.visual_guide import VisualGuideOverlay
+    VISUAL_GUIDE_AVAILABLE = True
+except ImportError:
+    print("⚠️ Visual Guide Overlay not available")
+    VISUAL_GUIDE_AVAILABLE = False
 
 
 class Config:
@@ -141,6 +150,14 @@ class RealtimeCameraAnalyzer:
 
         # 임계값 (config에서 로드)
         self.thresholds = self.config.get('thresholds')
+
+        # Phase 3.3: 시각적 가이드 오버레이
+        if VISUAL_GUIDE_AVAILABLE:
+            self.visual_guide = VisualGuideOverlay()
+            self.show_visual_guides = True  # 토글 가능
+        else:
+            self.visual_guide = None
+            self.show_visual_guides = False
 
     def _init_camera(self) -> bool:
         """카메라 초기화"""
@@ -326,9 +343,54 @@ class RealtimeCameraAnalyzer:
         return feedback
 
     def _draw_overlay(self, frame: np.ndarray) -> np.ndarray:
-        """프레임에 피드백 오버레이 그리기"""
-        overlay = frame.copy()
+        """프레임에 피드백 오버레이 그리기 (Phase 3.3 통합)"""
         h, w = frame.shape[:2]
+
+        # ==========================================
+        # Phase 3.3: 시각적 가이드 오버레이
+        # ==========================================
+        if self.show_visual_guides and self.visual_guide is not None:
+            # 1. 삼분할선 (Rule of Thirds)
+            frame = self.visual_guide.draw_rule_of_thirds(frame, thickness=1)
+
+            # 2. 수평선 가이드 (기울기 피드백이 있으면)
+            tilt_feedback = [fb for fb in self.current_feedback if fb.get('category') == 'COMPOSITION']
+            if tilt_feedback:
+                # 현재 기울기 정보 추출 (간단히 0도로 가정, 실제로는 분석 데이터에서 가져와야 함)
+                current_tilt = 0.0  # TODO: 실제 기울기 값으로 대체
+                target_tilt = 0.0
+                frame = self.visual_guide.draw_horizon_line(frame, current_tilt, target_tilt)
+
+            # 3. 피드백 패널 (상단)
+            feedback_messages = [fb['message'] for fb in self.current_feedback if fb.get('priority', 99) > 0]
+            if feedback_messages:
+                frame = self.visual_guide.draw_feedback_panel(
+                    frame,
+                    feedback_messages[:3],  # 최대 3개
+                    position='top'
+                )
+                # 피드백 패널이 있으면 기존 텍스트 오버레이는 스킵
+                # PIL 이미지로 변환 (한글 렌더링용)
+                pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                draw = ImageDraw.Draw(pil_image)
+
+                # 간단한 헤더만 하단에 표시
+                self._put_text(
+                    draw,
+                    f"FPS: {self.fps:.1f} | Analysis: {self.analysis_count}",
+                    (10, h - 40),
+                    self.color_text,
+                    scale=self.font_scale * 0.7,
+                    thickness=max(1, self.font_thickness - 1)
+                )
+
+                # PIL → OpenCV 변환
+                return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+
+        # ==========================================
+        # 기존 텍스트 오버레이 (시각적 가이드 없을 때)
+        # ==========================================
+        overlay = frame.copy()
 
         # 반투명 배경
         overlay_height = 50 + len(self.current_feedback) * self.line_height
@@ -506,6 +568,7 @@ class RealtimeCameraAnalyzer:
             - 'q': 종료
             - 'r': 레퍼런스 이미지 재분석
             - 's': 현재 프레임 저장
+            - 'g': 시각적 가이드 토글 (Phase 3.3)
             - SPACE: 분석 일시정지/재개
         """
 
@@ -513,11 +576,12 @@ class RealtimeCameraAnalyzer:
             return
 
         print("\n" + "="*60)
-        print("📹 실시간 카메라 피드백 시작")
+        print("📹 실시간 카메라 피드백 시작 (Phase 1-3 통합)")
         print("="*60)
         print("\n조작법:")
         print("  - 'q': 종료")
         print("  - 'r': 레퍼런스 재분석")
+        print("  - 'g': 시각적 가이드 ON/OFF")
         print("  - 's': 현재 프레임 저장")
         print("  - SPACE: 분석 일시정지/재개")
         print("\n" + "="*60 + "\n")
@@ -583,6 +647,14 @@ class RealtimeCameraAnalyzer:
                     save_path = Path(f"capture_{int(time.time())}.jpg")
                     cv2.imwrite(str(save_path), frame)
                     print(f"💾 프레임 저장: {save_path}")
+                elif key == ord('g'):
+                    # Phase 3.3: 시각적 가이드 토글
+                    if self.visual_guide is not None:
+                        self.show_visual_guides = not self.show_visual_guides
+                        status = "ON" if self.show_visual_guides else "OFF"
+                        print(f"👁️ 시각적 가이드: {status}")
+                    else:
+                        print("⚠️ 시각적 가이드를 사용할 수 없습니다")
                 elif key == ord(' '):
                     paused = not paused
                     status = "일시정지" if paused else "재개"
