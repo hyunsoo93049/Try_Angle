@@ -31,18 +31,8 @@ struct FeedbackOverlay: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 120)
-            } else {
-                // 피드백 없을 때
-                Text("✅ 완벽합니다!")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.green.opacity(0.8))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 120)
             }
+            // 피드백 없을 때는 아무것도 표시하지 않음 (레퍼런스 선택 전일 수 있음)
         }
     }
 

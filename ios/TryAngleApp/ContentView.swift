@@ -222,8 +222,34 @@ struct ContentView: View {
                 updateCombinedFeedback()
             }
 
+            // 레퍼런스 선택 안내
+            if referenceImage == nil {
+                VStack {
+                    Spacer()
+                        .frame(height: 200)
+
+                    Text("📸 레퍼런스 이미지를 선택하세요")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                        .background(Color.blue.opacity(0.8))
+                        .cornerRadius(16)
+                        .shadow(radius: 10)
+
+                    Text("왼쪽 하단의 버튼을 눌러\n따라 찍고 싶은 사진을 선택하세요")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 8)
+
+                    Spacer()
+                }
+            }
+
             // 완벽한 상태 표시
-            if realtimeAnalyzer.isPerfect {
+            else if realtimeAnalyzer.isPerfect {
                 VStack {
                     Spacer()
                         .frame(height: 200)
@@ -316,6 +342,31 @@ struct ContentView: View {
                                 stopAnalysis()
                             }
                         }
+
+                    Spacer()
+
+                    // 촬영 버튼 (중앙)
+                    Button(action: {
+                        performCapture()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 70, height: 70)
+
+                            Circle()
+                                .stroke(Color.white, lineWidth: 3)
+                                .frame(width: 82, height: 82)
+
+                            if capturedImage != nil {
+                                Image(systemName: "checkmark")
+                                    .font(.title)
+                                    .foregroundColor(.green)
+                            }
+                        }
+                    }
+                    .disabled(capturedImage != nil)
+                    .opacity(capturedImage != nil ? 0.5 : 1.0)
 
                     Spacer()
 
