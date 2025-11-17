@@ -137,7 +137,7 @@ class RealtimeAnalyzer: ObservableObject {
             // 거리 기반 피드백 (줌이 아닌 걸음 수)
             if sizeRatio < 0.7 {  // 피사체가 작음 → 가까이 가야 함
                 let distanceFactor = 1.0 / sizeRatio
-                let estimatedDistanceM: Float = 2.5  // 평균 촬영 거리
+                let estimatedDistanceM: CGFloat = 2.5  // 평균 촬영 거리
                 let distanceChangeM = estimatedDistanceM * (distanceFactor - 1.0)
                 let steps = max(1, Int(round(distanceChangeM / 0.7)))  // 0.7m per step
 
@@ -153,7 +153,7 @@ class RealtimeAnalyzer: ObservableObject {
                 ))
             } else if sizeRatio > 1.4 {  // 피사체가 큼 → 멀리 가야 함
                 let distanceFactor = sizeRatio
-                let estimatedDistanceM: Float = 2.5
+                let estimatedDistanceM: CGFloat = 2.5
                 let distanceChangeM = estimatedDistanceM * (distanceFactor - 1.0)
                 let steps = max(1, Int(round(distanceChangeM / 0.7)))
 
