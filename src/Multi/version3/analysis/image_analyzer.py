@@ -23,6 +23,17 @@ if str(VERSION3_DIR) not in sys.path:
 from feature_extraction.feature_extractor_v2 import extract_features_v2 as extract_features_full
 from matching.cluster_matcher import match_cluster_from_features
 
+# Phase 1.3: Feature Cache
+try:
+    utils_dir = VERSION3_DIR / "utils"
+    if str(utils_dir) not in sys.path:
+        sys.path.append(str(utils_dir))
+    from feature_cache import CachedFeatureExtractor
+    FEATURE_CACHE_AVAILABLE = True
+except ImportError:
+    FEATURE_CACHE_AVAILABLE = False
+    print("⚠️ Feature Cache not available (Phase 1.3)")
+
 # 포즈 분석
 try:
     from analysis.pose_analyzer import PoseAnalyzer
@@ -87,7 +98,15 @@ class ImageAnalyzer:
         # Step 1: Feature 추출 (모든 모델 사용)
         # ==========================================
         print(f"  🔧 Extracting features from {os.path.basename(image_path)}...")
-        self.features = extract_features_full(image_path)
+
+        # Phase 1.3: Feature Cache 사용
+        if FEATURE_CACHE_AVAILABLE:
+            cache_dir = VERSION3_DIR / "cache" / "features"
+            cached_extractor = CachedFeatureExtractor(cache_dir=str(cache_dir))
+            self.features = cached_extractor.extract(image_path)
+        else:
+            # Fallback: 직접 추출
+            self.features = extract_features_full(image_path)
 
         if self.features is None:
             raise RuntimeError("❌ Feature extraction failed!")

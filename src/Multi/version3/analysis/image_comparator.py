@@ -23,6 +23,19 @@ if str(ANALYSIS_DIR) not in sys.path:
 
 from image_analyzer import ImageAnalyzer
 
+# Phase 1: Feedback Formatter
+try:
+    import sys
+    from pathlib import Path
+    utils_dir = VERSION3_DIR / "utils"
+    if str(utils_dir) not in sys.path:
+        sys.path.append(str(utils_dir))
+    from feedback_formatter import FeedbackFormatter, BeginnerMessageAdapter
+    FEEDBACK_FORMATTER_AVAILABLE = True
+except ImportError:
+    FEEDBACK_FORMATTER_AVAILABLE = False
+    print("⚠️ Feedback Formatter not available (Phase 1)")
+
 # Pose comparison
 try:
     from analysis.pose_analyzer import compare_poses
@@ -591,8 +604,98 @@ class ImageComparator:
         
         # 우선순위 정렬
         feedback_list.sort(key=lambda x: x["priority"])
-        
+
         return feedback_list
+
+    def get_top_feedback(
+        self,
+        top_k: int = 3,
+        include_style: bool = False,
+        user_level: str = 'beginner'
+    ) -> Dict:
+        """
+        Phase 1.1: Top-K 피드백 + 초보자 모드
+
+        Args:
+            top_k: 상위 몇 개까지 표시 (기본 3개)
+            include_style: 클러스터 정보도 Top-K에 포함할지
+            user_level: 'beginner', 'intermediate', 'expert'
+
+        Returns:
+            {
+                'style': 스타일 정보,
+                'primary': Top-K 피드백,
+                'secondary': 나머지 피드백,
+                'total_count': 전체 개수,
+                'more_count': 더보기 개수,
+                'critical_count': 치명적 문제 개수,
+                'display_text': UI용 텍스트
+            }
+        """
+        # 전체 피드백 가져오기
+        feedback_list = self.get_prioritized_feedback()
+
+        if not FEEDBACK_FORMATTER_AVAILABLE:
+            # Fallback: formatter 없으면 기존 방식
+            return {
+                'primary': feedback_list[:top_k],
+                'secondary': feedback_list[top_k:],
+                'total_count': len(feedback_list),
+                'more_count': len(feedback_list[top_k:]),
+                'display_text': '\n'.join([f"{i+1}. {fb['message']}"
+                                          for i, fb in enumerate(feedback_list[:top_k])])
+            }
+
+        # Phase 1: Formatter 사용
+        formatter = FeedbackFormatter(user_level=user_level)
+        adapter = BeginnerMessageAdapter()
+
+        # 초보자 모드 적용
+        if user_level == 'beginner':
+            feedback_list = [adapter.adapt_message(fb, user_level)
+                           for fb in feedback_list]
+
+        # Top-K 추출
+        top_k_result = formatter.format_top_k(
+            feedback_list,
+            top_k=top_k,
+            include_style=include_style
+        )
+
+        # UI용 텍스트 생성
+        top_k_result['display_text'] = formatter.format_for_display(top_k_result)
+        top_k_result['secondary_text'] = formatter.format_secondary(top_k_result)
+
+        return top_k_result
+
+    def get_beginner_friendly_feedback(self) -> str:
+        """
+        Phase 1.2: 초보자용 간단한 피드백
+
+        Returns:
+            초보자가 이해하기 쉬운 텍스트
+        """
+        top_k_result = self.get_top_feedback(top_k=3, user_level='beginner')
+        return top_k_result['display_text']
+
+    def get_expert_feedback(self) -> str:
+        """
+        전문가용 상세 피드백
+
+        Returns:
+            기술적 세부사항 포함
+        """
+        feedback_list = self.get_prioritized_feedback()
+
+        lines = []
+        for i, fb in enumerate(feedback_list, 1):
+            lines.append(f"{i}. [{fb['category'].upper()}] {fb['message']}")
+            if fb.get('detail'):
+                lines.append(f"   {fb['detail']}")
+            lines.append(f"   Priority: {fb['priority']}")
+            lines.append("")
+
+        return "\n".join(lines)
 
 
 # ============================================================
