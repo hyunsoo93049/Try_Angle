@@ -248,8 +248,8 @@ struct ContentView: View {
                 }
             }
 
-            // 완벽한 상태 표시
-            else if realtimeAnalyzer.isPerfect {
+            // 완벽한 상태 표시 (레퍼런스가 있을 때만)
+            else if referenceImage != nil && realtimeAnalyzer.isPerfect {
                 VStack {
                     Spacer()
                         .frame(height: 200)
