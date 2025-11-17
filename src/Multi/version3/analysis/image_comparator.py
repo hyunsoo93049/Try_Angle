@@ -263,18 +263,23 @@ class ImageComparator:
                 user_height = user_bbox[3] - user_bbox[1]
                 user_area = user_width * user_height
 
-                # 줌 비율 계산
+                # 프레이밍 비율 계산
                 zoom_ratio = user_area / (ref_area + 1e-8)
 
-                if zoom_ratio < 0.7:  # 사용자가 너무 줌아웃
-                    zoom_needed = 1 / zoom_ratio
-                    percent = int((zoom_needed - 1) * 100)
-                    feedback_list.append(f"화면을 {zoom_needed:.1f}배 확대하세요 (줌 {percent}% 늘리기)")
+                # 거리 기반 피드백 (줌 말고 거리 조정)
+                if zoom_ratio < 0.7:  # 피사체가 작음 → 가까이 가야 함
+                    distance_factor = 1 / zoom_ratio  # 얼마나 더 커야 하는지
+                    estimated_distance_m = 2.5  # 평균 촬영 거리 (2.5m)
+                    distance_change_m = estimated_distance_m * (distance_factor - 1)
+                    steps = max(1, round(distance_change_m / 0.7))  # 0.7m per step
+                    feedback_list.append(f"피사체에 약 {steps}걸음 더 가까이 가세요 (프레임에 더 크게)")
 
-                elif zoom_ratio > 1.4:  # 사용자가 너무 줌인
-                    zoom_needed = zoom_ratio
-                    percent = int((zoom_needed - 1) * 100)
-                    feedback_list.append(f"화면을 {1/zoom_needed:.1f}배 축소하세요 (줌 {percent}% 줄이기)")
+                elif zoom_ratio > 1.4:  # 피사체가 큼 → 멀리 가야 함
+                    distance_factor = zoom_ratio  # 얼마나 작아야 하는지
+                    estimated_distance_m = 2.5
+                    distance_change_m = estimated_distance_m * (distance_factor - 1)
+                    steps = max(1, round(distance_change_m / 0.7))
+                    feedback_list.append(f"피사체에서 약 {steps}걸음 뒤로 가세요 (프레임에 여백 추가)")
 
                 # 크롭 제안 (bbox 위치 비교)
                 ref_center_x = (ref_bbox[0] + ref_bbox[2]) / 2
