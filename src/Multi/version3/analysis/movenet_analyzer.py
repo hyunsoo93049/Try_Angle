@@ -129,8 +129,8 @@ class MoveNetAnalyzer:
         # 전처리: 256x256 리사이즈
         img_resized = cv2.resize(img_rgb, (self.input_size, self.input_size))
 
-        # Float32로 변환 (0~255 → 0~255, MoveNet은 정규화 필요 없음)
-        img_input = np.expand_dims(img_resized, axis=0).astype(np.int32)
+        # UINT8로 변환 (0~255, MoveNet은 정규화 필요 없음)
+        img_input = np.expand_dims(img_resized, axis=0).astype(np.uint8)
 
         # 추론
         self.interpreter.set_tensor(self.input_details[0]['index'], img_input)
