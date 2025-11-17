@@ -97,6 +97,78 @@ def match_cluster_from_features(feature_dict):
 
 
 # ---------------------------------------------------------
+# [3.5] Phase 1-2: 클러스터 폴백 로직 추가
+# ---------------------------------------------------------
+def match_with_fallback(feature_dict, confidence_threshold=0.6):
+    """
+    클러스터 매칭 + 폴백 로직
+
+    Args:
+        feature_dict: 특징 딕셔너리 (CLIP, OpenCLIP, DINO 등)
+        confidence_threshold: 클러스터 신뢰도 임계값 (기본 0.6)
+
+    Returns:
+        {
+            'cluster_id': int or -1 (폴백 시),
+            'distance': float,
+            'confidence': float (0~1),
+            'method': 'cluster' or 'fallback',
+            'label': str,
+            'raw_embedding': numpy array (128D),
+            'fallback_reason': str (폴백 시에만)
+        }
+    """
+    # 모델 가져오기
+    models = get_cluster_models()
+    kmeans_model = models["kmeans_model"]
+    centroids = models["centroids"]
+    cluster_info = models["cluster_info"]
+
+    # 128D 임베딩 생성
+    vec_128 = embed_features(feature_dict).reshape(1, -1)
+
+    # 모든 클러스터 중심까지의 거리 계산
+    distances = np.linalg.norm(centroids - vec_128, axis=1)
+    nearest_cluster = np.argmin(distances)
+    min_distance = float(distances[nearest_cluster])
+
+    # Confidence 계산 (거리 기반, 0~1 범위)
+    # 거리가 0이면 confidence 1.0, 거리가 클수록 confidence 감소
+    confidence = 1.0 / (1.0 + min_distance)
+
+    # 라벨 가져오기
+    if cluster_info and str(nearest_cluster) in cluster_info:
+        label = cluster_info[str(nearest_cluster)]
+    else:
+        label = f"cluster_{nearest_cluster}"
+
+    # Threshold 체크
+    if confidence >= confidence_threshold:
+        # 클러스터 매칭 성공
+        return {
+            'cluster_id': int(nearest_cluster),
+            'distance': min_distance,
+            'confidence': confidence,
+            'method': 'cluster',
+            'label': label,
+            'raw_embedding': vec_128.flatten()
+        }
+    else:
+        # 폴백 모드: 클러스터 없음 (직접 유사도 비교로 전환 필요)
+        print(f"⚠️ Cluster confidence low ({confidence:.3f} < {confidence_threshold}), using fallback mode...")
+
+        return {
+            'cluster_id': -1,  # 클러스터 없음
+            'distance': min_distance,
+            'confidence': confidence,
+            'method': 'fallback',
+            'label': 'unknown_style',
+            'raw_embedding': vec_128.flatten(),
+            'fallback_reason': f'low_confidence ({confidence:.3f})'
+        }
+
+
+# ---------------------------------------------------------
 # [4] 이미지 파일 입력 전용
 # ---------------------------------------------------------
 def match_cluster_from_image(image_path):
