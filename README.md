@@ -3,11 +3,13 @@
 > **AI-Powered Photography Guide System**
 > 레퍼런스 이미지를 분석하여 실시간으로 촬영 가이드를 제공하는 AI 시스템
 
+[![Version](https://img.shields.io/badge/Version-2.0.0-brightgreen.svg)](https://github.com/hyunsoo93049/Try_Angle/releases/tag/v2.0.0)
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-green.svg)](https://opencv.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20iOS-lightgrey.svg)]()
 
 ---
 
@@ -46,6 +48,32 @@
 | 🖼️ **프레이밍** | 줌 비율 | "화면 1.3배 확대" |
 | ⚖️ **대칭성** | 좌우 균형 | "왼쪽으로 20% 이동" |
 
+---
+
+## ✨ v2.0.0 - Phase 1-3 UX 개선 (2025-11-17)
+
+### 🎯 Phase 1: 피드백 품질 향상
+- **Top-K 필터링**: 중요한 피드백 3개만 표시 (정보 과부하 방지)
+- **초보자 친화 메시지**: "EV +0.7" → "화면 위로 슬라이드해서 밝게" 변환
+- **특징 캐싱**: SHA256 해시 기반 캐싱으로 99.5% 속도 향상
+
+### 📊 Phase 2: 촬영 워크플로우 가이드
+- **5단계 워크플로우**: 위치 → 구도 → 포즈 → 카메라 → 품질 순서로 안내
+- **진행도 추적**: 점수 기반 개선 추적 (0-100점)
+- **우선순위 시스템**: Critical > Important > Recommended 분류
+- **격려 메시지**: "잘하고 있어요! 조금만 더!" 동기부여
+
+### 🤖 Phase 3: AI 기반 스마트 추천
+- **레퍼런스 추천**: 대조학습(Contrastive Learning) 기반 유사 이미지 추천
+- **시각적 가이드**: 삼분할선, 수평선, 목표 위치 오버레이
+- **적응형 임계값**: 클로즈업/인물/풍경별 품질 기준 자동 조정
+
+### 📱 iOS 백엔드 서버
+- **FastAPI v2.0.0**: RESTful API 서버
+- **실시간 피드백 API**: `/api/feedback/enhanced` 엔드포인트
+- **세션 기반 추적**: 사용자별 진행도 관리
+- **자동 문서화**: Swagger UI (`http://localhost:8000/docs`)
+
 ### 핵심 기술
 
 ```mermaid
@@ -62,6 +90,7 @@ graph LR
 
 **AI 모델:**
 - **CLIP** (OpenAI): 이미지 특징 추출
+- **ResNet50 Contrastive**: 대조학습 기반 레퍼런스 추천 (77% accuracy)
 - **YOLO11-pose**: 인물 포즈 검출
 - **MediaPipe**: 정밀 관절 분석
 - **MiDaS**: Depth 추정
@@ -172,13 +201,42 @@ cd src/Multi/version3
 # python camera_realtime.py
 ```
 
-###  조작법
+### 📱 iOS 백엔드 서버 실행
+
+```bash
+# 1. FastAPI 설치
+pip install fastapi uvicorn python-multipart
+
+# 2. 서버 실행
+cd backend
+python main.py
+
+# 3. Swagger UI 접속
+# http://localhost:8000/docs
+
+# 4. iOS에서 접속 (WiFi)
+# PC IP 확인: ipconfig (Windows) / ifconfig (Mac)
+# iOS 앱에서: http://192.168.X.X:8000
+```
+
+**주요 엔드포인트**:
+- `GET /` - 서버 상태 확인
+- `POST /api/feedback/enhanced` - Phase 1-3 통합 피드백
+- `POST /api/progress/reset` - 진행도 초기화
+- `GET /api/recommendations` - AI 레퍼런스 추천
+
+자세한 사용법은 [API 가이드](docs/API가이드.md)를 참고하세요.
+
+---
+
+###  조작법 (Python 카메라)
 
 | 키 | 기능 |
 |----|------|
 | `q` | 종료 |
 | `r` | 레퍼런스 재분석 |
 | `s` | 현재 프레임 저장 |
+| `g` | 시각적 가이드 토글 (Phase 3.3) |
 | `SPACE` | 분석 일시정지/재개 |
 
 ---
@@ -187,12 +245,21 @@ cd src/Multi/version3
 
 ```
 Try_Angle/
-├── src/Multi/version3/              # 🎯 메인 코드
-│   ├── camera_realtime.py           # 실시간 카메라 시스템
+├── 📱 backend/                      # FastAPI 서버 (v2.0.0)
+│   └── main.py                      # iOS 연동 API
+│
+├── 📚 docs/                         # 개발자 문서
+│   ├── 개발자인수인계.md              # 인수인계 문서
+│   ├── 배포체크리스트.md              # 배포 확인사항
+│   ├── 완료요약.md                   # Phase 1-3 완료 요약
+│   └── API가이드.md                  # API 사용 가이드
+│
+├── 🎯 src/Multi/version3/           # 메인 코드
+│   ├── camera_realtime.py           # 실시간 카메라 (Phase 3.3)
 │   ├── config.yaml                  # 크로스 플랫폼 설정
-│   ├── main_feedback.py             # 이미지 비교 피드백
-│   ├── run_camera.sh                # 🍎 macOS/Linux 실행 스크립트
-│   ├── run_camera.bat               # 🪟 Windows 실행 스크립트
+│   ├── main_feedback.py             # Phase 1-3 통합 피드백
+│   ├── run_camera.sh                # 🍎 macOS/Linux 실행
+│   ├── run_camera.bat               # 🪟 Windows 실행
 │   │
 │   ├── analysis/                    # 분석 모듈
 │   │   ├── image_analyzer.py        # 통합 분석기
@@ -201,6 +268,17 @@ Try_Angle/
 │   │   ├── exif_analyzer.py         # EXIF 추출
 │   │   ├── quality_analyzer.py      # 품질 분석
 │   │   └── lighting_analyzer.py     # 조명 분석
+│   │
+│   ├── utils/                       # Phase 1-3 유틸리티
+│   │   ├── feedback_formatter.py    # Top-K 필터링 (Phase 1.1)
+│   │   ├── feature_cache.py         # 특징 캐싱 (Phase 1.3)
+│   │   ├── workflow_guide.py        # 워크플로우 가이드 (Phase 2.1)
+│   │   ├── progress_tracker.py      # 진행도 추적 (Phase 2.2)
+│   │   ├── priority_system.py       # 우선순위 시스템 (Phase 2.3)
+│   │   ├── adaptive_thresholds.py   # 적응형 임계값 (Phase 2.4)
+│   │   ├── reference_recommender.py # 레퍼런스 추천 (Phase 3.1)
+│   │   ├── visual_guide.py          # 시각적 가이드 (Phase 3.3)
+│   │   └── model_cache.py           # 싱글톤 캐싱
 │   │
 │   ├── feature_extraction/          # 특징 추출
 │   │   └── feature_extractor_v2.py  # CLIP 기반 추출
@@ -211,18 +289,26 @@ Try_Angle/
 │   ├── embedder/                    # 임베딩
 │   │   └── embedder.py              # 128D 임베딩
 │   │
-│   ├── utils/                       # 유틸리티
-│   │   └── model_cache.py           # 싱글톤 캐싱
+│   ├── scripts/                     # 학습 스크립트
+│   │   ├── train_contrastive.py     # 대조학습 (Phase 3.2)
+│   │   └── prepare_contrastive_data.py
 │   │
-│   └── training/                    # 학습 스크립트
+│   └── training/                    # 기존 학습 스크립트
 │       ├── retrain_features.py
 │       └── retrain_clustering.py
 │
-├── feature_models/                  # 학습된 모델 (Git LFS)
-├── features/                        # 클러스터 정보
-└── data/                           # 데이터셋
-    ├── clustered_images/           # 클러스터별 이미지
-    └── test_images/                # 테스트 이미지
+├── 🗂️ models/                       # 학습된 모델
+│   ├── contrastive/                 # 대조학습 모델
+│   │   └── best_model.pth           # ResNet50 (77% accuracy)
+│   └── feature_models/              # 클러스터링 모델 (Git LFS)
+│
+├── 📁 data/                         # 데이터셋
+│   ├── clustered_images/            # 클러스터별 이미지
+│   ├── contrastive_dataset/         # 대조학습 데이터
+│   └── test_images/                 # 테스트 이미지
+│
+└── 📦 archive/                      # 오래된 문서 보관
+    └── old_version3_docs/
 ```
 
 ---
@@ -329,12 +415,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 문서
+## 📚 문서
 
-- [Quick Reference](src/Multi/version3/QUICK_REFERENCE.md) - 빠른 시작 가이드
-- [Mac Setup](src/Multi/version3/MAC_SETUP.md) - macOS 설치 가이드
-- [Design Doc](src/Multi/version3/DESIGN_QUALITY_LIGHTING.md) - 상세 설계 문서
-- [Changelog](src/Multi/version3/CHANGELOG.md) - 변경 이력
+### 개발자 문서 (docs/)
+- [개발자 인수인계](docs/개발자인수인계.md) - 프로젝트 인수인계 가이드
+- [완료 요약](docs/완료요약.md) - Phase 1-3 완료 내용
+- [API 가이드](docs/API가이드.md) - FastAPI 서버 사용법
+- [배포 체크리스트](docs/배포체크리스트.md) - 배포 전 확인사항
+
+### AI 개발자용
+- [Quick Reference](src/Multi/version3/QUICK_REFERENCE.md) - AI-to-AI 인수인계
+
+### 아카이브
+- [디자인 문서](archive/old_version3_docs/) - 이전 버전 설계 문서
 
 ---
 
