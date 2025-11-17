@@ -4,8 +4,8 @@
 # =========================================
 
 # Core Dependencies
-numpy>=1.24.0
-opencv-python>=4.8.0
+numpy>=1.23.5,<2.0.0  # TensorFlow 호환성
+opencv-python==4.10.0.84  # TensorFlow 호환성
 pillow>=10.0.0
 pyyaml>=6.0
 
@@ -13,6 +13,10 @@ pyyaml>=6.0
 torch>=2.0.0
 torchvision>=0.15.0
 transformers>=4.30.0
+
+# TensorFlow (Phase 2: MoveNet)
+tensorflow==2.15.0  # macOS ARM64 지원
+tensorflow-hub>=0.16.0
 
 # Computer Vision & AI
 ultralytics>=8.0.0
