@@ -1,10 +1,22 @@
 # TryAngle 패치 노트
 
-## v1.4.1 - 2025-11-18 21:30
+## v1.4.1 - 2025-11-18 21:45
 
 ### 🔧 버그 수정 및 시스템 개선
 
-#### 1. 카메라 센서 좌표계 문제 완전 해결 🎯 (사용자 핵심 지적)
+#### 1. 사진 촬영 90도 회전 문제 해결 🔥 (최종 핵심 수정)
+- **문제**: 사진을 찍으면 오른쪽으로 90도 회전되어 저장
+  - 화면 프리뷰는 세로, 저장된 사진은 가로
+  - 화면에 보이는 것 ≠ 캡처되는 것
+- **근본 원인**: UIImage orientation은 메타데이터일 뿐
+  - 실제 픽셀은 여전히 landscape (가로)
+  - cropImage()가 픽셀 기준으로 자름 → 가로 기준 크롭
+- **해결**: 크롭 전에 픽셀 회전
+  1. fixedOrientation() → 픽셀을 실제로 회전 (세로)
+  2. cropImage() → 세로 기준으로 자름
+  3. 저장 → 올바른 방향 ✅
+
+#### 2. 카메라 센서 좌표계 문제 완전 해결 🎯 (사용자 핵심 지적)
 - **문제**: 세로로 들고 있는데 가로 기준으로 피드백
   - "위로 향하세요" → 가로로 들고 위로 들어야 맞음
   - 센서가 세로/가로를 인식하지 못함
@@ -58,8 +70,8 @@
   - 위아래 마스크로 촬영 범위 명확히 표시
 
 ### 📋 기술적 변경사항
+- ContentView.swift: 크롭 전에 `fixedOrientation()` 호출로 픽셀 회전
 - Services/CameraManager.swift: `fixedOrientation()` 제거, orientation `.right` 유지
-- ContentView.swift: 저장 시에만 `fixedOrientation()` 호출
 - Services/Comparison/FeedbackGenerator.swift: Y 위치, 기울기 방향 로직 반전
 - Extensions/UIImage+Orientation.swift: cgImageOrientation 추가
 - Services/Analysis/VisionAnalyzer.swift: 모든 Vision 요청에 orientation 전달
