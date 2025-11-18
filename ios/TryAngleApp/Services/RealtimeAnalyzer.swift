@@ -12,7 +12,7 @@ struct FrameAnalysis {
     let tiltAngle: Float                            // 기울기 각도
     let faceYaw: Float?                             // 얼굴 좌우 회전 (정면=0)
     let facePitch: Float?                           // 얼굴 상하 각도
-    let cameraAngle: CameraAngle?                   // 🆕 카메라 각도 (enum)
+    let cameraAngle: CameraAngle                    // 🆕 카메라 각도 (enum, 항상 값 있음)
     let poseKeypoints: [(point: CGPoint, confidence: Float)]?  // 🆕 신뢰도 포함 키포인트
     let compositionType: CompositionType?           // 🆕 구도 타입
     let faceObservation: VNFaceObservation?         // 🆕 얼굴 관찰 결과 (랜드마크 포함)
@@ -107,7 +107,7 @@ class RealtimeAnalyzer: ObservableObject {
         print("📸 레퍼런스 분석 완료:")
         print("   - 얼굴: \(faceRect != nil ? "감지됨" : "없음")")
         print("   - 얼굴 각도: yaw=\(faceYaw ?? 0), pitch=\(facePitch ?? 0)")
-        print("   - 카메라 앵글: \(cameraAngle?.description ?? "알 수 없음")")
+        print("   - 카메라 앵글: \(cameraAngle.description)")
         print("   - 구도: \(compositionType?.description ?? "알 수 없음")")
         print("   - 포즈 키포인트: \(poseKeypoints?.count ?? 0)개")
         print("   - 밝기: \(brightness)")
@@ -265,20 +265,19 @@ class RealtimeAnalyzer: ObservableObject {
         }
 
         // 5순위: 카메라 각도 피드백 (🆕 개선)
-        if let refAngle = reference.cameraAngle, let curAngle = currentCameraAngle {
-            if !cameraAngleDetector.compareAngles(reference: refAngle, current: curAngle) {
-                if let message = cameraAngleDetector.generateAngleFeedback(reference: refAngle, current: curAngle) {
-                    feedback.append(FeedbackItem(
-                        priority: 5,
-                        icon: "📷",
-                        message: message,
-                        category: "camera_angle",
-                        currentValue: nil,
-                        targetValue: nil,
-                        tolerance: nil,
-                        unit: nil
-                    ))
-                }
+        let refAngle = reference.cameraAngle
+        if !cameraAngleDetector.compareAngles(reference: refAngle, current: currentCameraAngle) {
+            if let message = cameraAngleDetector.generateAngleFeedback(reference: refAngle, current: currentCameraAngle) {
+                feedback.append(FeedbackItem(
+                    priority: 5,
+                    icon: "📷",
+                    message: message,
+                    category: "camera_angle",
+                    currentValue: nil,
+                    targetValue: nil,
+                    tolerance: nil,
+                    unit: nil
+                ))
             }
         }
 
