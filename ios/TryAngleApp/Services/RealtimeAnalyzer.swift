@@ -6,14 +6,16 @@ import Combine
 
 // MARK: - 실시간 분석을 위한 데이터 구조
 struct FrameAnalysis {
-    let faceRect: CGRect?          // 얼굴 위치 (정규화된 좌표)
-    let bodyRect: CGRect?          // 전신 추정 영역
-    let brightness: Float          // 평균 밝기
-    let tiltAngle: Float           // 기울기 각도
-    let faceYaw: Float?            // 얼굴 좌우 회전 (정면=0)
-    let facePitch: Float?          // 얼굴 상하 각도
-    let cameraAngle: String?       // 카메라 각도 (high/low/front)
-    let poseKeypoints: [CGPoint]?  // 포즈 키포인트 (코, 어깨, 팔꿈치 등)
+    let faceRect: CGRect?                           // 얼굴 위치 (정규화된 좌표)
+    let bodyRect: CGRect?                           // 전신 추정 영역
+    let brightness: Float                           // 평균 밝기
+    let tiltAngle: Float                            // 기울기 각도
+    let faceYaw: Float?                             // 얼굴 좌우 회전 (정면=0)
+    let facePitch: Float?                           // 얼굴 상하 각도
+    let cameraAngle: CameraAngle?                   // 🆕 카메라 각도 (enum)
+    let poseKeypoints: [(point: CGPoint, confidence: Float)]?  // 🆕 신뢰도 포함 키포인트
+    let compositionType: CompositionType?           // 🆕 구도 타입
+    let faceObservation: VNFaceObservation?         // 🆕 얼굴 관찰 결과 (랜드마크 포함)
 }
 
 // MARK: - 실시간 피드백 생성기
@@ -31,6 +33,11 @@ class RealtimeAnalyzer: ObservableObject {
     private let historyThreshold = 3  // 3번 연속 감지되어야 표시
     private var perfectFrameCount = 0  // 완벽한 프레임 연속 횟수
     private let perfectThreshold = 10  // 10프레임(약 1초) 연속 완벽해야 감지
+
+    // 🆕 V1 분석기들
+    private let compositionAnalyzer = CompositionAnalyzer()
+    private let cameraAngleDetector = CameraAngleDetector()
+    private let poseComparator = AdaptivePoseComparator()
 
     // Vision 요청 캐싱
     private lazy var faceDetectionRequest: VNDetectFaceLandmarksRequest = {
@@ -58,7 +65,7 @@ class RealtimeAnalyzer: ObservableObject {
         let faceYaw = faceObservation?.yaw?.floatValue
         let facePitch = faceObservation?.pitch?.floatValue
 
-        // 포즈 키포인트 추출
+        // 포즈 키포인트 추출 (신뢰도 포함)
         let poseKeypoints = extractPoseKeypoints(from: poseDetectionRequest.results?.first)
 
         // 밝기 계산
@@ -70,8 +77,19 @@ class RealtimeAnalyzer: ObservableObject {
         // 전신 영역 추정 (얼굴 기준)
         let bodyRect = estimateBodyRect(from: faceRect)
 
-        // 카메라 각도 추정 (얼굴 위치 기반)
-        let cameraAngle = estimateCameraAngle(faceRect: faceRect, facePitch: facePitch)
+        // 🆕 카메라 각도 감지 (개선된 방법)
+        let cameraAngle = cameraAngleDetector.detectCameraAngle(
+            faceRect: faceRect,
+            facePitch: facePitch,
+            faceObservation: faceObservation
+        )
+
+        // 🆕 구도 타입 분류
+        var compositionType: CompositionType? = nil
+        if let faceRect = faceRect {
+            let subjectPosition = CGPoint(x: faceRect.midX, y: faceRect.midY)
+            compositionType = compositionAnalyzer.classifyComposition(subjectPosition: subjectPosition)
+        }
 
         referenceAnalysis = FrameAnalysis(
             faceRect: faceRect,
@@ -81,13 +99,16 @@ class RealtimeAnalyzer: ObservableObject {
             faceYaw: faceYaw,
             facePitch: facePitch,
             cameraAngle: cameraAngle,
-            poseKeypoints: poseKeypoints
+            poseKeypoints: poseKeypoints,
+            compositionType: compositionType,
+            faceObservation: faceObservation
         )
 
         print("📸 레퍼런스 분석 완료:")
         print("   - 얼굴: \(faceRect != nil ? "감지됨" : "없음")")
         print("   - 얼굴 각도: yaw=\(faceYaw ?? 0), pitch=\(facePitch ?? 0)")
-        print("   - 카메라 앵글: \(cameraAngle ?? "알 수 없음")")
+        print("   - 카메라 앵글: \(cameraAngle?.description ?? "알 수 없음")")
+        print("   - 구도: \(compositionType?.description ?? "알 수 없음")")
         print("   - 포즈 키포인트: \(poseKeypoints?.count ?? 0)개")
         print("   - 밝기: \(brightness)")
         print("   - 기울기: \(tiltAngle)도")
@@ -124,7 +145,12 @@ class RealtimeAnalyzer: ObservableObject {
         let currentBodyRect = estimateBodyRect(from: currentFaceRect)
         let currentTilt = calculateTilt(cgImage)
         let currentPoseKeypoints = extractPoseKeypoints(from: poseDetectionRequest.results?.first)
-        let currentCameraAngle = estimateCameraAngle(faceRect: currentFaceRect, facePitch: currentFacePitch)
+        // 🆕 개선된 카메라 앵글 감지
+        let currentCameraAngle = cameraAngleDetector.detectCameraAngle(
+            faceRect: currentFaceRect,
+            facePitch: currentFacePitch,
+            faceObservation: faceObservation
+        )
 
         var feedback: [FeedbackItem] = []
 
@@ -238,19 +264,10 @@ class RealtimeAnalyzer: ObservableObject {
             }
         }
 
-        // 5순위: 카메라 각도 피드백
+        // 5순위: 카메라 각도 피드백 (🆕 개선)
         if let refAngle = reference.cameraAngle, let curAngle = currentCameraAngle {
-            if refAngle != curAngle {
-                var message = ""
-                if refAngle == "low" && curAngle != "low" {
-                    message = "카메라를 낮춰주세요 (로우앵글)"
-                } else if refAngle == "high" && curAngle != "high" {
-                    message = "카메라를 높여주세요 (하이앵글)"
-                } else if refAngle == "front" && curAngle != "front" {
-                    message = "카메라를 정면 높이로"
-                }
-
-                if !message.isEmpty {
+            if !cameraAngleDetector.compareAngles(reference: refAngle, current: curAngle) {
+                if let message = cameraAngleDetector.generateAngleFeedback(reference: refAngle, current: curAngle) {
                     feedback.append(FeedbackItem(
                         priority: 5,
                         icon: "📷",
@@ -265,13 +282,28 @@ class RealtimeAnalyzer: ObservableObject {
             }
         }
 
-        // 6순위: 포즈 피드백 (팔, 다리 각도)
+        // 6순위: 포즈 피드백 (🆕 적응형 비교)
         if let refPose = reference.poseKeypoints, let curPose = currentPoseKeypoints {
-            if refPose.count >= 13 && curPose.count >= 13 {
-                // 주요 관절 비교 (어깨, 팔꿈치, 손목 등)
-                let poseDiff = comparePoseKeypoints(reference: refPose, current: curPose)
-                for diff in poseDiff {
-                    feedback.append(diff)
+            if refPose.count >= 17 && curPose.count >= 17 {
+                // 적응형 포즈 비교 (부분 포즈 대응)
+                let comparisonResult = poseComparator.comparePoses(
+                    referenceKeypoints: refPose,
+                    currentKeypoints: curPose
+                )
+
+                // 포즈 피드백 생성
+                let poseFeedbacks = poseComparator.generateFeedback(from: comparisonResult)
+                for (message, category) in poseFeedbacks {
+                    feedback.append(FeedbackItem(
+                        priority: 6,
+                        icon: "💪",
+                        message: message,
+                        category: category,
+                        currentValue: nil,
+                        targetValue: nil,
+                        tolerance: nil,
+                        unit: nil
+                    ))
                 }
             }
         }
@@ -398,10 +430,11 @@ class RealtimeAnalyzer: ObservableObject {
 
     // MARK: - 포즈 및 각도 분석 헬퍼
 
-    private func extractPoseKeypoints(from observation: VNHumanBodyPoseObservation?) -> [CGPoint]? {
+    // 🆕 신뢰도 포함 키포인트 추출
+    private func extractPoseKeypoints(from observation: VNHumanBodyPoseObservation?) -> [(point: CGPoint, confidence: Float)]? {
         guard let observation = observation else { return nil }
 
-        var keypoints: [CGPoint] = []
+        var keypoints: [(point: CGPoint, confidence: Float)] = []
 
         // VNHumanBodyPoseObservation의 주요 키포인트 추출
         let jointNames: [VNHumanBodyPoseObservation.JointName] = [
@@ -425,122 +458,18 @@ class RealtimeAnalyzer: ObservableObject {
         ]
 
         for jointName in jointNames {
-            if let point = try? observation.recognizedPoint(jointName),
-               point.confidence > 0.3 {  // 신뢰도 30% 이상만 사용
-                keypoints.append(point.location)
+            if let point = try? observation.recognizedPoint(jointName) {
+                keypoints.append((point: point.location, confidence: point.confidence))
             } else {
-                keypoints.append(.zero)  // 감지 실패 시 (0, 0)
+                keypoints.append((point: .zero, confidence: 0.0))  // 감지 실패
             }
         }
 
         return keypoints.isEmpty ? nil : keypoints
     }
 
-    private func estimateCameraAngle(faceRect: CGRect?, facePitch: Float?) -> String? {
-        guard let face = faceRect else { return nil }
-
-        // 얼굴 위치 기반 카메라 각도 추정
-        let faceY = face.midY
-
-        // 화면 상단 1/3: 로우앵글 (카메라가 낮음)
-        // 화면 중간 1/3: 정면
-        // 화면 하단 1/3: 하이앵글 (카메라가 높음)
-        if faceY < 0.33 {
-            return "low"   // 로우앵글
-        } else if faceY > 0.67 {
-            return "high"  // 하이앵글
-        } else {
-            return "front" // 정면
-        }
-    }
-
-    private func comparePoseKeypoints(reference: [CGPoint], current: [CGPoint]) -> [FeedbackItem] {
-        var poseFeedback: [FeedbackItem] = []
-
-        // 최소 17개 키포인트 필요 (코, 눈, 귀, 어깨, 팔꿈치, 손목, 골반, 무릎, 발목)
-        guard reference.count >= 17, current.count >= 17 else { return [] }
-
-        // 주요 포즈 비교 (어깨, 팔꿈치, 손목)
-        // 왼쪽 팔 각도
-        if reference[5] != .zero && reference[7] != .zero && reference[9] != .zero &&
-           current[5] != .zero && current[7] != .zero && current[9] != .zero {
-
-            let refLeftArmAngle = calculateAngle(
-                p1: reference[5],  // 왼쪽 어깨
-                p2: reference[7],  // 왼쪽 팔꿈치
-                p3: reference[9]   // 왼쪽 손목
-            )
-
-            let curLeftArmAngle = calculateAngle(
-                p1: current[5],
-                p2: current[7],
-                p3: current[9]
-            )
-
-            let angleDiff = abs(refLeftArmAngle - curLeftArmAngle)
-            if angleDiff > 15 {  // 15도 이상 차이
-                let direction = curLeftArmAngle > refLeftArmAngle ? "펴세요" : "구부리세요"
-                poseFeedback.append(FeedbackItem(
-                    priority: 6,
-                    icon: "💪",
-                    message: "왼팔을 \(direction)",
-                    category: "pose_left_arm",
-                    currentValue: Double(curLeftArmAngle),
-                    targetValue: Double(refLeftArmAngle),
-                    tolerance: 15.0,
-                    unit: "도"
-                ))
-            }
-        }
-
-        // 오른쪽 팔 각도
-        if reference[6] != .zero && reference[8] != .zero && reference[10] != .zero &&
-           current[6] != .zero && current[8] != .zero && current[10] != .zero {
-
-            let refRightArmAngle = calculateAngle(
-                p1: reference[6],  // 오른쪽 어깨
-                p2: reference[8],  // 오른쪽 팔꿈치
-                p3: reference[10]  // 오른쪽 손목
-            )
-
-            let curRightArmAngle = calculateAngle(
-                p1: current[6],
-                p2: current[8],
-                p3: current[10]
-            )
-
-            let angleDiff = abs(refRightArmAngle - curRightArmAngle)
-            if angleDiff > 15 {
-                let direction = curRightArmAngle > refRightArmAngle ? "펴세요" : "구부리세요"
-                poseFeedback.append(FeedbackItem(
-                    priority: 6,
-                    icon: "💪",
-                    message: "오른팔을 \(direction)",
-                    category: "pose_right_arm",
-                    currentValue: Double(curRightArmAngle),
-                    targetValue: Double(refRightArmAngle),
-                    tolerance: 15.0,
-                    unit: "도"
-                ))
-            }
-        }
-
-        return poseFeedback
-    }
-
-    private func calculateAngle(p1: CGPoint, p2: CGPoint, p3: CGPoint) -> Float {
-        // 세 점으로 각도 계산 (p2가 꼭짓점)
-        let v1 = CGVector(dx: p1.x - p2.x, dy: p1.y - p2.y)
-        let v2 = CGVector(dx: p3.x - p2.x, dy: p3.y - p2.y)
-
-        let dot = v1.dx * v2.dx + v1.dy * v2.dy
-        let mag1 = sqrt(v1.dx * v1.dx + v1.dy * v1.dy)
-        let mag2 = sqrt(v2.dx * v2.dx + v2.dy * v2.dy)
-
-        let cosAngle = dot / (mag1 * mag2)
-        let angleRad = acos(max(-1, min(1, cosAngle)))  // -1~1 범위로 제한
-        let angleDeg = Float(angleRad * 180 / .pi)
-
-        return angleDeg
-    }
+    // 🗑️ 구식 함수들 제거됨 (새 컴포넌트로 대체)
+    // - estimateCameraAngle() → CameraAngleDetector 사용
+    // - comparePoseKeypoints() → AdaptivePoseComparator 사용
+    // - calculateAngle() → AdaptivePoseComparator 내부 사용
 }
