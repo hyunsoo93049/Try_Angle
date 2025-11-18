@@ -4,16 +4,26 @@
 
 ### 🔧 버그 수정 및 시스템 개선
 
-#### 1. 피드백 방향 로직 완전 수정 ⭐ 최우선 수정
+#### 1. 카메라 센서 좌표계 문제 완전 해결 🎯 (사용자 핵심 지적)
+- **문제**: 세로로 들고 있는데 가로 기준으로 피드백
+  - "위로 향하세요" → 가로로 들고 위로 들어야 맞음
+  - 센서가 세로/가로를 인식하지 못함
+- **근본 원인**: `fixedOrientation()` 호출로 orientation이 `.up`으로 변경
+  - Vision이 "이미 올바른 방향"이라고 판단
+  - 좌표 변환을 하지 않음 → 여전히 landscape 기준!
+- **해결**: 실시간 분석에는 orientation `.right` 유지
+  - CameraManager: `fixedOrientation()` 제거
+  - Vision이 `.right`를 받아 자동으로 좌표 90도 회전
+  - 저장할 때만 `fixedOrientation()` 호출
+
+#### 2. 피드백 방향 로직 수정
 - **문제**: "아래로 이동하세요" → 실제로는 위로 움직여야 맞음
   - 피드백 방향이 **완전히 반대**로 구현됨
-  - 레퍼런스를 이해하는게 아니라 카메라 기준으로 잘못된 피드백
 - **해결**: 모든 방향 로직 수정
   - Y 위치: `current > target ? "위로" : "아래로"` → **"아래로" : "위로"** ✅
   - 기울기: `current > target ? "왼쪽" : "오른쪽"` → **"오른쪽" : "왼쪽"** ✅
-  - Vision 좌표계 정확히 이해하여 수정
 
-#### 2. Vision 좌표계 오류 수정 (매우 중요 🔥)
+#### 3. Vision 좌표계 오류 수정 (매우 중요 🔥)
 - **문제**: "아래로 이동하세요" 메시지에 오른쪽으로 움직여야 맞음
   - iPhone 카메라 센서가 landscape로 장착되어 좌표계 90도 회전
   - VNImageRequestHandler에 이미지 orientation 미전달
@@ -24,7 +34,7 @@
   - 화면 좌표계와 Vision 좌표계 완전 일치
   - 위/아래/좌/우 피드백이 올바르게 작동
 
-#### 2. 비율 감지 시스템 수정 (중요)
+#### 4. 비율 감지 시스템 수정
 - **문제**: 세로 사진의 비율이 잘못 감지됨
   - 16:9 세로 사진 (1080x1920) → 0.56으로 계산되어 1:1로 오인식
   - UIImage.size가 EXIF orientation이 적용된 크기를 반환
@@ -32,7 +42,7 @@
   - 세로/가로 무관하게 정확한 비율 인식
   - 16:9, 4:3, 1:1 모두 정확히 감지
 
-#### 2. 방향 시스템 완전 제거
+#### 5. 방향 시스템 완전 제거
 - **문제**: 디바이스 방향 감지가 불필요하고 혼란스러움
   - 앱은 portrait only로 작동
   - 카메라는 항상 portrait 모드로 고정
@@ -42,17 +52,19 @@
   - 레퍼런스 비율과 현재 카메라 비율만 비교
   - DeviceOrientationManager 제거
 
-#### 3. 4:3 비율 화면 표시 수정
+#### 6. 4:3 비율 화면 표시 수정
 - **문제**: 4:3 선택 시 전체 화면 사용 (비율 맞지 않음)
 - **해결**: `screenWidth × 4/3`로 정확한 4:3 영역 표시
   - 위아래 마스크로 촬영 범위 명확히 표시
 
 ### 📋 기술적 변경사항
+- Services/CameraManager.swift: `fixedOrientation()` 제거, orientation `.right` 유지
+- ContentView.swift: 저장 시에만 `fixedOrientation()` 호출
+- Services/Comparison/FeedbackGenerator.swift: Y 위치, 기울기 방향 로직 반전
 - Extensions/UIImage+Orientation.swift: cgImageOrientation 추가
 - Services/Analysis/VisionAnalyzer.swift: 모든 Vision 요청에 orientation 전달
 - Models/Feedback.swift: `CameraAspectRatio.detect()` 로직 개선
 - Services/RealtimeAnalyzer.swift: 방향 감지 → 비율 비교로 전환
-- ContentView.swift: 4:3 비율 계산 수정, DeviceOrientationManager 제거
 - Models/DeviceOrientation.swift: 사용 중단 (추후 제거 예정)
 
 ---
