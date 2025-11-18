@@ -10,6 +10,7 @@ class CameraManager: NSObject, ObservableObject {
     @Published var isFlashOn = false
     @Published var currentFPS: Double = 0.0
     @Published var currentZoom: CGFloat = 1.0
+    @Published var aspectRatio: CameraAspectRatio = .ratio4_3  // 🆕 카메라 비율
 
     // MARK: - Camera Properties
     private let session = AVCaptureSession()
@@ -29,7 +30,7 @@ class CameraManager: NSObject, ObservableObject {
     // Preview layer (UIKit에서 사용)
     var previewLayer: AVCaptureVideoPreviewLayer {
         let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
+        layer.videoGravity = .resizeAspectFill  // 기본 카메라처럼 화면 전체 채우기
         return layer
     }
 
@@ -273,6 +274,37 @@ class CameraManager: NSObject, ObservableObject {
         let newZoom = currentZoom * scale
         setZoom(newZoom)
     }
+
+    // MARK: - Aspect Ratio Control
+    func setAspectRatio(_ ratio: CameraAspectRatio) {
+        guard aspectRatio != ratio else { return }
+
+        aspectRatio = ratio
+
+        // 세션 재구성
+        session.beginConfiguration()
+
+        // 비율에 따라 적절한 preset 설정
+        switch ratio {
+        case .ratio16_9:
+            if session.canSetSessionPreset(.hd1920x1080) {
+                session.sessionPreset = .hd1920x1080
+            }
+        case .ratio4_3:
+            if session.canSetSessionPreset(.photo) {
+                session.sessionPreset = .photo
+            }
+        case .ratio1_1:
+            // 1:1은 별도 preset이 없으므로 .photo 사용 후 크롭
+            if session.canSetSessionPreset(.photo) {
+                session.sessionPreset = .photo
+            }
+        }
+
+        session.commitConfiguration()
+
+        print("📷 Camera aspect ratio changed to: \(ratio.rawValue)")
+    }
 }
 
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
@@ -290,7 +322,11 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
 
-        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+        // 올바른 방향으로 이미지 생성 (portrait 모드에서는 right로 회전)
+        var image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+
+        // 저장용으로 orientation을 .up으로 변환
+        image = image.fixedOrientation()
 
         // FPS 계산
         fpsFrameCount += 1
