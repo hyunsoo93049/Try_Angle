@@ -323,10 +323,9 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
 
         // 올바른 방향으로 이미지 생성 (portrait 모드에서는 right로 회전)
-        var image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
-
-        // 저장용으로 orientation을 .up으로 변환
-        image = image.fixedOrientation()
+        // ⚠️ 실시간 분석을 위해 orientation을 .right로 유지 (Vision이 자동으로 좌표 변환)
+        // fixedOrientation()을 호출하면 orientation이 .up이 되어 Vision 좌표 변환 안 됨
+        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
 
         // FPS 계산
         fpsFrameCount += 1
