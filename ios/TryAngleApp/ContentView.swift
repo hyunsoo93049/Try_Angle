@@ -1,9 +1,11 @@
 import SwiftUI
+import Photos
 
 struct ContentView: View {
     // MARK: - State
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var realtimeAnalyzer = RealtimeAnalyzer()  // 실시간 분석
+    @StateObject private var orientationManager = DeviceOrientationManager()  // 🆕 디바이스 방향 감지
     @State private var referenceImage: UIImage?
     @State private var feedbackItems: [FeedbackItem] = []
     @State private var serverFeedbackItems: [FeedbackItem] = []  // 서버 피드백 (포즈 등)
@@ -21,6 +23,10 @@ struct ContentView: View {
     @State private var autoCapture = true  // 자동 촬영 모드
     @State private var capturedImage: UIImage?  // 촬영된 이미지
     @State private var showCaptureFlash = false  // 촬영 플래시 효과
+
+    // 🆕 비율 선택
+    @State private var selectedAspectRatio: CameraAspectRatio = .ratio4_3
+    @State private var showAspectRatioMenu = false
 
     // 통합 피드백 (실시간 + 서버)
     private var combinedFeedback: [FeedbackItem] {
@@ -55,11 +61,14 @@ struct ContentView: View {
             showCaptureFlash = true
         }
 
-        // 이미지 저장
-        capturedImage = currentFrame
+        // 선택한 비율로 크롭
+        let croppedImage = cropImage(currentFrame, to: selectedAspectRatio)
 
-        // 사진 앨범에 저장
-        UIImageWriteToSavedPhotosAlbum(currentFrame, nil, nil, nil)
+        // 이미지 저장
+        capturedImage = croppedImage
+
+        // 🔧 사진 앨범에 저장 (방향 정보 유지)
+        saveImageToPhotoLibrary(croppedImage)
 
         // 플래시 효과 제거
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -77,20 +86,81 @@ struct ContentView: View {
         }
     }
 
+    // 이미지를 선택한 비율로 크롭
+    private func cropImage(_ image: UIImage, to aspectRatio: CameraAspectRatio) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+
+        let imageWidth = CGFloat(cgImage.width)
+        let imageHeight = CGFloat(cgImage.height)
+        let targetRatio = aspectRatio.ratio
+
+        var cropRect: CGRect
+
+        // 이미지는 세로 모드이므로, 비율을 역수로 계산
+        let currentRatio = imageHeight / imageWidth
+        let targetVerticalRatio = 1.0 / targetRatio
+
+        if currentRatio > targetVerticalRatio {
+            // 이미지가 더 세로로 길면, 높이를 줄임 (위아래 크롭)
+            let targetHeight = imageWidth * targetVerticalRatio
+            let yOffset = (imageHeight - targetHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: imageWidth, height: targetHeight)
+        } else {
+            // 이미지가 더 가로로 넓으면, 너비를 줄임 (좌우 크롭)
+            let targetWidth = imageHeight / targetVerticalRatio
+            let xOffset = (imageWidth - targetWidth) / 2
+            cropRect = CGRect(x: xOffset, y: 0, width: targetWidth, height: imageHeight)
+        }
+
+        guard let croppedCGImage = cgImage.cropping(to: cropRect) else { return image }
+
+        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    // 🔧 사진을 올바른 방향으로 저장
+    private func saveImageToPhotoLibrary(_ image: UIImage) {
+        PHPhotoLibrary.requestAuthorization { status in
+            guard status == .authorized else {
+                print("⚠️ 사진 라이브러리 권한 없음")
+                return
+            }
+
+            PHPhotoLibrary.shared().performChanges {
+                // 이미지는 이미 CameraManager에서 fixedOrientation 처리됨
+                let request = PHAssetChangeRequest.creationRequestForAsset(from: image)
+                _ = request.placeholderForCreatedAsset
+            } completionHandler: { success, error in
+                if success {
+                    print("✅ 사진 저장 성공")
+                } else if let error = error {
+                    print("❌ 사진 저장 실패: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
-            // 1. 카메라 프리뷰
+            // 1. 카메라 프리뷰 (비율에 따라 캡처 영역 표시)
             if cameraManager.isAuthorized {
-                CameraView(cameraManager: cameraManager)
-                    .ignoresSafeArea()
-                    .onAppear {
-                        cameraManager.setupSession()
-                        cameraManager.startSession()
-                    }
-                    .onDisappear {
-                        cameraManager.stopSession()
-                        stopAnalysis()
-                    }
+                ZStack {
+                    // 전체 화면 카메라 프리뷰
+                    CameraView(cameraManager: cameraManager)
+                        .ignoresSafeArea()
+
+                    // 비율에 따른 마스크 오버레이 (캡처되지 않는 영역 어둡게)
+                    AspectRatioMaskView(selectedRatio: selectedAspectRatio)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                }
+                .onAppear {
+                    cameraManager.setupSession()
+                    cameraManager.startSession()
+                }
+                .onDisappear {
+                    cameraManager.stopSession()
+                    stopAnalysis()
+                }
             } else {
                 // 권한 없을 때
                 VStack(spacing: 20) {
@@ -177,7 +247,7 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 60)
 
-                // 두번째 행: FPS 토글 및 정보
+                // 두번째 행: FPS 토글 및 비율 선택
                 HStack(spacing: 16) {
                     // FPS 토글
                     Button(action: {
@@ -203,6 +273,30 @@ struct ContentView: View {
                     }
 
                     Spacer()
+
+                    // 🆕 비율 선택 버튼
+                    Menu {
+                        ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
+                            Button(action: {
+                                selectedAspectRatio = ratio
+                            }) {
+                                HStack {
+                                    Text(ratio.displayName)
+                                    if ratio == selectedAspectRatio {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(selectedAspectRatio.displayName)
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.blue.opacity(0.7))
+                            .cornerRadius(8)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -213,6 +307,8 @@ struct ContentView: View {
             // 4. 피드백 오버레이 (실시간 + 서버 피드백 통합)
             FeedbackOverlay(
                 feedbackItems: combinedFeedback,
+                categoryStatuses: realtimeAnalyzer.categoryStatuses,  // 🆕 카테고리 상태 전달
+                completedFeedbacks: realtimeAnalyzer.completedFeedbacks,  // 🆕 완료된 피드백 전달
                 processingTime: processingTime
             )
             .onChange(of: realtimeAnalyzer.instantFeedback) { newFeedback in
@@ -425,6 +521,14 @@ struct ContentView: View {
                 performCapture()
             }
         }
+        .onChange(of: selectedAspectRatio) { newRatio in
+            cameraManager.setAspectRatio(newRatio)
+
+            // 비율 변경시 즉시 프레임 재분석하여 피드백 갱신
+            if let currentFrame = cameraManager.currentFrame {
+                realtimeAnalyzer.analyzeFrame(currentFrame)
+            }
+        }
     }
 
     // MARK: - Analysis Control
@@ -434,8 +538,8 @@ struct ContentView: View {
         // 기존 타이머 중지
         stopRealtimeAnalysis()
 
-        // 60fps로 프레임 분석 (16ms마다)
-        frameUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { _ in
+        // 🔄 10fps로 프레임 분석 (100ms마다) - 민감도 감소
+        frameUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
             if let currentFrame = cameraManager.currentFrame {
                 realtimeAnalyzer.analyzeFrame(currentFrame)
             }
@@ -518,6 +622,62 @@ struct ContentView: View {
                 errorMessage = "서버 연결 실패: \(error.localizedDescription)"
                 isAnalyzing = false
             }
+        }
+    }
+}
+
+// MARK: - Aspect Ratio Mask View
+
+struct AspectRatioMaskView: View {
+    let selectedRatio: CameraAspectRatio
+
+    var body: some View {
+        GeometryReader { geometry in
+            let screenWidth = geometry.size.width
+            let screenHeight = geometry.size.height
+
+            // 실제 iPhone 카메라처럼: 4:3이 기본(전체 화면), 나머지는 위아래 크롭
+            // iPhone 화면 비율은 대략 19.5:9 (2.16:1)
+
+            let captureHeight: CGFloat = {
+                switch selectedRatio {
+                case .ratio4_3:
+                    // 4:3 - 전체 화면 사용 (iPhone 카메라 센서의 기본 비율)
+                    return screenHeight
+
+                case .ratio1_1:
+                    // 1:1 - 정사각형, 너비를 기준으로 높이 설정
+                    return screenWidth
+
+                case .ratio16_9:
+                    // 16:9 - 와이드, 가장 좁은 높이
+                    return screenWidth * 16.0 / 9.0
+                }
+            }()
+
+            // 위아래 마스크 높이 계산
+            let maskHeight = max(0, (screenHeight - captureHeight) / 2)
+
+            ZStack {
+                if maskHeight > 0 {
+                    // 상단 마스크
+                    VStack {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.7))
+                            .frame(height: maskHeight)
+                        Spacer()
+                    }
+
+                    // 하단 마스크
+                    VStack {
+                        Spacer()
+                        Rectangle()
+                            .fill(Color.black.opacity(0.7))
+                            .frame(height: maskHeight)
+                    }
+                }
+            }
+            .ignoresSafeArea()
         }
     }
 }

@@ -12,10 +12,32 @@ struct FrameAnalysis {
     let tiltAngle: Float                            // 기울기 각도
     let faceYaw: Float?                             // 얼굴 좌우 회전 (정면=0)
     let facePitch: Float?                           // 얼굴 상하 각도
-    let cameraAngle: CameraAngle                    // 🆕 카메라 각도 (enum, 항상 값 있음)
-    let poseKeypoints: [(point: CGPoint, confidence: Float)]?  // 🆕 신뢰도 포함 키포인트
-    let compositionType: CompositionType?           // 🆕 구도 타입
-    let faceObservation: VNFaceObservation?         // 🆕 얼굴 관찰 결과 (랜드마크 포함)
+    let cameraAngle: CameraAngle                    // 카메라 각도
+    let poseKeypoints: [(point: CGPoint, confidence: Float)]?  // 신뢰도 포함 키포인트
+    let compositionType: CompositionType?           // 구도 타입
+    let faceObservation: VNFaceObservation?         // 얼굴 관찰 결과
+    let gaze: GazeResult?                           // 🆕 시선 추적 결과
+    let depth: DepthResult?                         // 🆕 깊이 추정 결과
+    let aspectRatio: CameraAspectRatio              // 🆕 카메라 비율
+    let imagePadding: ImagePadding?                 // 🆕 여백 정보
+    let imageOrientation: ImageOrientation          // 🆕 이미지 방향 (세로/가로)
+}
+
+// 🆕 이미지 여백 정보
+struct ImagePadding {
+    let top: CGFloat        // 상단 여백 (0.0 ~ 1.0)
+    let bottom: CGFloat     // 하단 여백
+    let left: CGFloat       // 좌측 여백
+    let right: CGFloat      // 우측 여백
+
+    var total: CGFloat {
+        return top + bottom + left + right
+    }
+
+    var hasExcessivePadding: Bool {
+        // 어느 한 쪽이 15% 이상 여백이면 과도함
+        return top > 0.15 || bottom > 0.15 || left > 0.15 || right > 0.15
+    }
 }
 
 // MARK: - 실시간 피드백 생성기
@@ -23,6 +45,8 @@ class RealtimeAnalyzer: ObservableObject {
     @Published var instantFeedback: [FeedbackItem] = []
     @Published var isPerfect: Bool = false  // 완벽한 상태 감지
     @Published var perfectScore: Double = 0.0  // 완성도 점수 (0~1)
+    @Published var categoryStatuses: [CategoryStatus] = []  // 🆕 카테고리별 상태
+    @Published var completedFeedbacks: [CompletedFeedback] = []  // 🆕 완료된 피드백들
 
     private var referenceAnalysis: FrameAnalysis?
     private var lastAnalysisTime = Date()
@@ -30,14 +54,39 @@ class RealtimeAnalyzer: ObservableObject {
 
     // 히스테리시스를 위한 상태 추적
     private var feedbackHistory: [String: Int] = [:]  // 카테고리별 연속 감지 횟수
-    private let historyThreshold = 3  // 3번 연속 감지되어야 표시
+    private let historyThreshold = 10  // 🔄 10번 연속 감지되어야 표시 (약 1초)
     private var perfectFrameCount = 0  // 완벽한 프레임 연속 횟수
     private let perfectThreshold = 10  // 10프레임(약 1초) 연속 완벽해야 감지
 
+    // 🆕 고정 피드백 (한 번 표시되면 해결될 때까지 유지)
+    private var stickyFeedbacks: [String: FeedbackItem] = [:]  // 카테고리별 고정 피드백
+
+    // 🆕 이전 프레임의 피드백 (완료 감지용)
+    private var previousFeedbackIds = Set<String>()
+    // 🆕 완료 감지를 위한 히스테리시스
+    private var disappearedFeedbackHistory: [String: Int] = [:]  // 사라진 피드백의 연속 횟수
+    private let disappearedThreshold = 5  // 5번 연속 사라져야 완료로 판단
+
+    // 🆕 고정 피드백 카테고리 (포즈 관련은 계속 표시)
+    // pose_missing_parts는 이제 레퍼런스 기반으로 제대로 감지되므로 sticky 처리
+    private let stickyCategories: Set<String> = [
+        "pose_left_arm",
+        "pose_right_arm",
+        "pose_left_leg",
+        "pose_right_leg",
+        "pose_missing_parts"
+    ]
+
     // 🆕 V1 분석기들
+    private let visionAnalyzer = VisionAnalyzer()
     private let compositionAnalyzer = CompositionAnalyzer()
     private let cameraAngleDetector = CameraAngleDetector()
+    private let gazeTracker = GazeTracker()
+    private let depthEstimator = DepthEstimator()
     private let poseComparator = AdaptivePoseComparator()
+    private let gapAnalyzer = GapAnalyzer()
+    private let feedbackGenerator = FeedbackGenerator()
+    private let framingAnalyzer = FramingAnalyzer()  // 🆕 프레이밍 분석기 추가
 
     // Vision 요청 캐싱
     private lazy var faceDetectionRequest: VNDetectFaceLandmarksRequest = {
@@ -51,45 +100,85 @@ class RealtimeAnalyzer: ObservableObject {
         return request
     }()
 
+    // MARK: - Helper Methods
+
+    /// 여백 계산
+    private func calculatePadding(bodyRect: CGRect?, imageSize: CGSize) -> ImagePadding? {
+        guard let body = bodyRect else { return nil }
+
+        let top = body.minY
+        let bottom = 1.0 - body.maxY
+        let left = body.minX
+        let right = 1.0 - body.maxX
+
+        return ImagePadding(
+            top: top,
+            bottom: bottom,
+            left: left,
+            right: right
+        )
+    }
+
     // MARK: - 레퍼런스 이미지 분석
     func analyzeReference(_ image: UIImage) {
         guard let cgImage = image.cgImage else { return }
 
-        // Vision 요청 실행
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        try? handler.perform([faceDetectionRequest, poseDetectionRequest])
+        // 🆕 이미지 방향 감지 (세로/가로)
+        let imageOrientation = ImageOrientation.detect(from: image)
 
-        // 얼굴 영역 및 각도 추출
-        let faceObservation = faceDetectionRequest.results?.first
-        let faceRect = faceObservation?.boundingBox
-        let faceYaw = faceObservation?.yaw?.floatValue
-        let facePitch = faceObservation?.pitch?.floatValue
+        // 🆕 VisionAnalyzer로 얼굴+포즈 동시 분석
+        let (faceResult, poseResult) = visionAnalyzer.analyzeFaceAndPose(from: image)
 
-        // 포즈 키포인트 추출 (신뢰도 포함)
-        let poseKeypoints = extractPoseKeypoints(from: poseDetectionRequest.results?.first)
+        let faceRect = faceResult?.faceRect
+        let faceYaw = faceResult?.yaw
+        let facePitch = faceResult?.pitch
+        let poseKeypoints = poseResult?.keypoints
 
         // 밝기 계산
-        let brightness = calculateBrightness(cgImage)
+        let brightness = visionAnalyzer.calculateBrightness(from: cgImage)
 
-        // 기울기 계산
-        let tiltAngle = calculateTilt(cgImage)
+        // 🆕 더치 틸트 감지
+        let tiltAngle = cameraAngleDetector.detectDutchTilt(faceObservation: faceResult?.observation) ?? 0.0
 
-        // 전신 영역 추정 (얼굴 기준)
-        let bodyRect = estimateBodyRect(from: faceRect)
+        // 전신 영역 추정
+        let bodyRect = visionAnalyzer.estimateBodyRect(from: faceRect)
 
-        // 🆕 카메라 각도 감지 (개선된 방법)
+        // 카메라 앵글 감지
         let cameraAngle = cameraAngleDetector.detectCameraAngle(
             faceRect: faceRect,
             facePitch: facePitch,
-            faceObservation: faceObservation
+            faceObservation: faceResult?.observation
         )
 
-        // 🆕 구도 타입 분류
+        // 구도 타입 분류
         var compositionType: CompositionType? = nil
         if let faceRect = faceRect {
             let subjectPosition = CGPoint(x: faceRect.midX, y: faceRect.midY)
             compositionType = compositionAnalyzer.classifyComposition(subjectPosition: subjectPosition)
         }
+
+        // 🆕 시선 추적
+        var gaze: GazeResult? = nil
+        if let faceObservation = faceResult?.observation {
+            gaze = gazeTracker.trackGaze(from: faceObservation)
+        }
+
+        // 🆕 깊이 추정
+        var depth: DepthResult? = nil
+        if let faceRect = faceRect {
+            depth = depthEstimator.estimateDistance(
+                faceRect: faceRect,
+                imageWidth: cgImage.width,
+                zoomFactor: 1.0  // TODO: CameraManager에서 실제 줌 값 가져오기
+            )
+        }
+
+        // 🆕 비율 감지
+        let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+        let aspectRatio = CameraAspectRatio.detect(from: imageSize)
+
+        // 🆕 여백 계산
+        let padding = calculatePadding(bodyRect: bodyRect, imageSize: imageSize)
 
         referenceAnalysis = FrameAnalysis(
             faceRect: faceRect,
@@ -101,14 +190,22 @@ class RealtimeAnalyzer: ObservableObject {
             cameraAngle: cameraAngle,
             poseKeypoints: poseKeypoints,
             compositionType: compositionType,
-            faceObservation: faceObservation
+            faceObservation: faceResult?.observation,
+            gaze: gaze,
+            depth: depth,
+            aspectRatio: aspectRatio,
+            imagePadding: padding,
+            imageOrientation: imageOrientation
         )
 
         print("📸 레퍼런스 분석 완료:")
+        print("   - 이미지 방향: \(imageOrientation.description)")
         print("   - 얼굴: \(faceRect != nil ? "감지됨" : "없음")")
         print("   - 얼굴 각도: yaw=\(faceYaw ?? 0), pitch=\(facePitch ?? 0)")
         print("   - 카메라 앵글: \(cameraAngle.description)")
         print("   - 구도: \(compositionType?.description ?? "알 수 없음")")
+        print("   - 시선: \(gaze?.direction.description ?? "알 수 없음")")
+        print("   - 거리: \(depth?.distance.map { String(format: "%.2fm", $0) } ?? "알 수 없음")")
         print("   - 포즈 키포인트: \(poseKeypoints?.count ?? 0)개")
         print("   - 밝기: \(brightness)")
         print("   - 기울기: \(tiltAngle)도")
@@ -119,9 +216,8 @@ class RealtimeAnalyzer: ObservableObject {
         // 너무 자주 분석하지 않도록 제한
         guard Date().timeIntervalSince(lastAnalysisTime) >= analysisInterval else { return }
 
-        // 레퍼런스가 없으면 분석하지 않음 (중요!)
+        // 레퍼런스가 없으면 분석하지 않음
         guard let reference = referenceAnalysis else {
-            // 레퍼런스 없으면 피드백 초기화
             DispatchQueue.main.async {
                 self.instantFeedback = []
                 self.perfectScore = 0.0
@@ -131,193 +227,197 @@ class RealtimeAnalyzer: ObservableObject {
         }
 
         guard let cgImage = image.cgImage else { return }
-
         lastAnalysisTime = Date()
 
-        // 빠른 Vision 분석
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        try? handler.perform([faceDetectionRequest, poseDetectionRequest])
+        // 🆕 VisionAnalyzer로 분석
+        let (faceResult, poseResult) = visionAnalyzer.analyzeFaceAndPose(from: image)
 
-        let faceObservation = faceDetectionRequest.results?.first
-        let currentFaceRect = faceObservation?.boundingBox
-        let currentFaceYaw = faceObservation?.yaw?.floatValue
-        let currentFacePitch = faceObservation?.pitch?.floatValue
-        let currentBodyRect = estimateBodyRect(from: currentFaceRect)
-        let currentTilt = calculateTilt(cgImage)
-        let currentPoseKeypoints = extractPoseKeypoints(from: poseDetectionRequest.results?.first)
-        // 🆕 개선된 카메라 앵글 감지
-        let currentCameraAngle = cameraAngleDetector.detectCameraAngle(
-            faceRect: currentFaceRect,
-            facePitch: currentFacePitch,
-            faceObservation: faceObservation
-        )
-
-        var feedback: [FeedbackItem] = []
-
-        // 1순위: 프레이밍 (거리 기반) 피드백
-        if let refBody = reference.bodyRect, let curBody = currentBodyRect {
-            let refSize = refBody.width * refBody.height
-            let curSize = curBody.width * curBody.height
-            let sizeRatio = curSize / refSize
-
-            // 거리 기반 피드백 (줌이 아닌 걸음 수)
-            if sizeRatio < 0.7 {  // 피사체가 작음 → 가까이 가야 함
-                let distanceFactor = 1.0 / sizeRatio
-                let estimatedDistanceM: CGFloat = 2.5  // 평균 촬영 거리
-                let distanceChangeM = estimatedDistanceM * (distanceFactor - 1.0)
-                let steps = max(1, Int(round(distanceChangeM / 0.7)))  // 0.7m per step
-
-                feedback.append(FeedbackItem(
+        // 얼굴이 감지되지 않으면 완성도 0으로 설정
+        guard faceResult != nil else {
+            DispatchQueue.main.async {
+                self.instantFeedback = [FeedbackItem(
                     priority: 1,
-                    icon: "🚶",
-                    message: "\(steps)걸음 앞으로",
-                    category: "distance_closer",
-                    currentValue: Double(curSize * 100),
-                    targetValue: Double(refSize * 100),
-                    tolerance: 10.0,
-                    unit: "%"
-                ))
-            } else if sizeRatio > 1.4 {  // 피사체가 큼 → 멀리 가야 함
-                let distanceFactor = sizeRatio
-                let estimatedDistanceM: CGFloat = 2.5
-                let distanceChangeM = estimatedDistanceM * (distanceFactor - 1.0)
-                let steps = max(1, Int(round(distanceChangeM / 0.7)))
-
-                feedback.append(FeedbackItem(
-                    priority: 1,
-                    icon: "🚶",
-                    message: "\(steps)걸음 뒤로",
-                    category: "distance_farther",
-                    currentValue: Double(curSize * 100),
-                    targetValue: Double(refSize * 100),
-                    tolerance: 10.0,
-                    unit: "%"
-                ))
-            }
-        }
-
-        // 2순위: 구도 (위치) 피드백
-        if let refFace = reference.faceRect, let curFace = currentFaceRect {
-            let xDiff = (curFace.midX - refFace.midX) * 100
-            let yDiff = (curFace.midY - refFace.midY) * 100
-
-            if abs(xDiff) > 5 {  // 5% 이상 차이
-                let direction = xDiff > 0 ? "왼쪽으로" : "오른쪽으로"
-                feedback.append(FeedbackItem(
-                    priority: 2,
-                    icon: "↔️",
-                    message: "\(direction) 이동",
-                    category: "position_x",
-                    currentValue: Double(curFace.midX * 100),
-                    targetValue: Double(refFace.midX * 100),
-                    tolerance: 5.0,
-                    unit: "%"
-                ))
-            }
-
-            if abs(yDiff) > 5 {
-                let direction = yDiff > 0 ? "아래로" : "위로"
-                feedback.append(FeedbackItem(
-                    priority: 2,
-                    icon: "↕️",
-                    message: "\(direction) 이동",
-                    category: "position_y",
-                    currentValue: Double(curFace.midY * 100),
-                    targetValue: Double(refFace.midY * 100),
-                    tolerance: 5.0,
-                    unit: "%"
-                ))
-            }
-        }
-
-        // 3순위: 기울기 피드백
-        let tiltDiff = currentTilt - reference.tiltAngle
-        if abs(tiltDiff) > 3 {
-            let direction = tiltDiff > 0 ? "왼쪽" : "오른쪽"
-            feedback.append(FeedbackItem(
-                priority: 3,
-                icon: "📐",
-                message: "\(direction)으로 회전",
-                category: "tilt",
-                currentValue: Double(currentTilt),
-                targetValue: Double(reference.tiltAngle),
-                tolerance: 3.0,
-                unit: "도"
-            ))
-        }
-
-        // 4순위: 얼굴 각도 피드백
-        if let refYaw = reference.faceYaw, let curYaw = currentFaceYaw {
-            let yawDiff = (curYaw - refYaw) * 180 / .pi  // 라디안 → 도
-            if abs(yawDiff) > 10 {  // 10도 이상 차이
-                let direction = yawDiff > 0 ? "왼쪽" : "오른쪽"
-                feedback.append(FeedbackItem(
-                    priority: 4,
                     icon: "👤",
-                    message: "얼굴을 \(direction)으로",
-                    category: "face_yaw",
-                    currentValue: Double(curYaw * 180 / .pi),
-                    targetValue: Double(refYaw * 180 / .pi),
-                    tolerance: 10.0,
-                    unit: "도"
-                ))
-            }
-        }
-
-        // 5순위: 카메라 각도 피드백 (🆕 개선)
-        let refAngle = reference.cameraAngle
-        if !cameraAngleDetector.compareAngles(reference: refAngle, current: currentCameraAngle) {
-            if let message = cameraAngleDetector.generateAngleFeedback(reference: refAngle, current: currentCameraAngle) {
-                feedback.append(FeedbackItem(
-                    priority: 5,
-                    icon: "📷",
-                    message: message,
-                    category: "camera_angle",
+                    message: "얼굴을 화면에 보여주세요",
+                    category: "no_face",
                     currentValue: nil,
                     targetValue: nil,
                     tolerance: nil,
                     unit: nil
-                ))
+                )]
+                self.perfectScore = 0.0
+                self.isPerfect = false
             }
+            return
         }
 
-        // 6순위: 포즈 피드백 (🆕 적응형 비교)
-        if let refPose = reference.poseKeypoints, let curPose = currentPoseKeypoints {
-            if refPose.count >= 17 && curPose.count >= 17 {
-                // 적응형 포즈 비교 (부분 포즈 대응)
-                let comparisonResult = poseComparator.comparePoses(
-                    referenceKeypoints: refPose,
-                    currentKeypoints: curPose
-                )
+        // 밝기 및 기울기
+        let brightness = visionAnalyzer.calculateBrightness(from: cgImage)
+        let tilt = cameraAngleDetector.detectDutchTilt(faceObservation: faceResult?.observation) ?? 0.0
 
-                // 포즈 피드백 생성
-                let poseFeedbacks = poseComparator.generateFeedback(from: comparisonResult)
-                for (message, category) in poseFeedbacks {
-                    feedback.append(FeedbackItem(
-                        priority: 6,
-                        icon: "💪",
-                        message: message,
-                        category: category,
-                        currentValue: nil,
-                        targetValue: nil,
-                        tolerance: nil,
-                        unit: nil
-                    ))
-                }
-            }
+        // 전신 영역
+        let bodyRect = visionAnalyzer.estimateBodyRect(from: faceResult?.faceRect)
+
+        // 카메라 앵글
+        let cameraAngle = cameraAngleDetector.detectCameraAngle(
+            faceRect: faceResult?.faceRect,
+            facePitch: faceResult?.pitch,
+            faceObservation: faceResult?.observation
+        )
+
+        // 구도
+        var compositionType: CompositionType? = nil
+        if let faceRect = faceResult?.faceRect {
+            let subjectPosition = CGPoint(x: faceRect.midX, y: faceRect.midY)
+            compositionType = compositionAnalyzer.classifyComposition(subjectPosition: subjectPosition)
+        }
+
+        // 시선
+        var gaze: GazeResult? = nil
+        if let faceObservation = faceResult?.observation {
+            gaze = gazeTracker.trackGaze(from: faceObservation)
+        }
+
+        // 깊이
+        var depth: DepthResult? = nil
+        if let faceRect = faceResult?.faceRect {
+            depth = depthEstimator.estimateDistance(
+                faceRect: faceRect,
+                imageWidth: cgImage.width,
+                zoomFactor: 1.0  // TODO: 실제 줌 값
+            )
+        }
+
+        // 🆕 비율 감지 (현재 카메라)
+        let currentImageSize = CGSize(width: cgImage.width, height: cgImage.height)
+        let currentAspectRatio = CameraAspectRatio.detect(from: currentImageSize)
+
+        // 🆕 여백 계산
+        let currentPadding = calculatePadding(bodyRect: bodyRect, imageSize: currentImageSize)
+
+        // 🆕 현재 프레임 방향 감지
+        let currentOrientation = ImageOrientation.detect(from: image)
+
+        // 🆕 프레이밍 분석 추가 (최우선)
+        let currentFrame = FrameAnalysis(
+            faceRect: faceResult?.faceRect,
+            bodyRect: bodyRect,
+            brightness: brightness,
+            tiltAngle: tilt,
+            faceYaw: faceResult?.yaw,
+            facePitch: faceResult?.pitch,
+            cameraAngle: cameraAngle,
+            poseKeypoints: poseResult?.keypoints,
+            compositionType: compositionType,
+            faceObservation: faceResult?.observation,
+            gaze: gaze,
+            depth: depth,
+            aspectRatio: currentAspectRatio,
+            imagePadding: currentPadding,
+            imageOrientation: currentOrientation
+        )
+
+        // 🆕 방향 불일치 체크 (최최우선)
+        var orientationMismatchFeedback: FeedbackItem? = nil
+        if reference.imageOrientation != currentOrientation {
+            let targetOrientation = reference.imageOrientation.description
+            orientationMismatchFeedback = FeedbackItem(
+                priority: -1,  // 최고 우선순위
+                icon: "📱",
+                message: "핸드폰을 \(targetOrientation)로 돌려주세요",
+                category: "orientation_mismatch",
+                currentValue: nil,
+                targetValue: nil,
+                tolerance: nil,
+                unit: nil
+            )
+        }
+
+        let framingResult = framingAnalyzer.analyzeFraming(
+            reference: reference,
+            current: currentFrame,
+            currentAspectRatio: currentAspectRatio
+        )
+
+        // 🆕 GapAnalyzer로 차이 계산
+        let gaps = gapAnalyzer.analyzeGaps(
+            reference: reference,
+            current: (
+                face: faceResult,
+                pose: poseResult,
+                bodyRect: bodyRect,
+                brightness: brightness,
+                tilt: tilt,
+                cameraAngle: cameraAngle,
+                compositionType: compositionType,
+                gaze: gaze,
+                depth: depth,
+                aspectRatio: currentAspectRatio,
+                padding: currentPadding
+            )
+        )
+
+        // 🆕 FeedbackGenerator로 피드백 생성
+        var feedbacks = feedbackGenerator.generateFeedback(
+            from: gaps,
+            reference: reference,
+            current: (
+                face: faceResult,
+                pose: poseResult,
+                bodyRect: bodyRect,
+                brightness: brightness,
+                tilt: tilt,
+                cameraAngle: cameraAngle,
+                compositionType: compositionType,
+                gaze: gaze,
+                depth: depth
+            )
+        )
+
+        // 프레이밍 피드백이 있으면 최우선으로 추가
+        if let framing = framingResult.feedback {
+            feedbacks.insert(FeedbackItem(
+                priority: 0,  // 최고 우선순위
+                icon: "📐",
+                message: framing,
+                category: "framing",
+                currentValue: nil,
+                targetValue: nil,
+                tolerance: nil,
+                unit: nil
+            ), at: 0)
         }
 
         // 히스테리시스 적용: 연속으로 감지된 피드백만 표시
         var stableFeedback: [FeedbackItem] = []
         var currentCategories = Set<String>()
 
-        for fb in feedback {
+        // 🆕 방향 불일치는 히스테리시스 없이 즉시 표시 (최고 우선순위)
+        if let orientationFeedback = orientationMismatchFeedback {
+            stableFeedback.append(orientationFeedback)
+            currentCategories.insert(orientationFeedback.category)
+        }
+
+        for fb in feedbacks {
             currentCategories.insert(fb.category)
             feedbackHistory[fb.category, default: 0] += 1
 
             // 히스테리시스 임계값 넘으면 표시
             if feedbackHistory[fb.category]! >= historyThreshold {
                 stableFeedback.append(fb)
+
+                // 🆕 고정 카테고리면 저장 (한 번 뜨면 해결될 때까지 유지)
+                if stickyCategories.contains(fb.category) {
+                    stickyFeedbacks[fb.category] = fb
+                }
+            }
+        }
+
+        // 🆕 고정 피드백 추가 (현재 감지되지 않아도 계속 표시)
+        for (category, stickyFb) in stickyFeedbacks {
+            // 이미 stableFeedback에 있으면 스킵
+            if !stableFeedback.contains(where: { $0.category == category }) {
+                stableFeedback.append(stickyFb)
             }
         }
 
@@ -325,11 +425,24 @@ class RealtimeAnalyzer: ObservableObject {
         for (category, _) in feedbackHistory {
             if !currentCategories.contains(category) {
                 feedbackHistory[category] = 0
+
+                // 🆕 고정 피드백도 제거 (완전히 해결됨)
+                if stickyCategories.contains(category) {
+                    // 5번 연속 사라져야 제거
+                    disappearedFeedbackHistory[category, default: 0] += 1
+                    if disappearedFeedbackHistory[category]! >= disappearedThreshold {
+                        stickyFeedbacks.removeValue(forKey: category)
+                        disappearedFeedbackHistory[category] = 0
+                    }
+                }
+            } else {
+                // 다시 나타나면 disappear 히스토리 초기화
+                disappearedFeedbackHistory[category] = 0
             }
         }
 
-        // 완벽한 상태 감지
-        let score = calculatePerfectScore(feedback: feedback)
+        // 완벽한 상태 감지 (GapAnalyzer 사용)
+        let score = gapAnalyzer.calculateCompletionScore(gaps: gaps)
         let isCurrentlyPerfect = stableFeedback.isEmpty && score > 0.95
 
         if isCurrentlyPerfect {
@@ -338,136 +451,94 @@ class RealtimeAnalyzer: ObservableObject {
             perfectFrameCount = 0
         }
 
+        // 🆕 완료된 피드백 감지 (히스테리시스 적용)
+        let currentFeedbackIds = Set(stableFeedback.map { $0.id })
+        let disappeared = previousFeedbackIds.subtracting(currentFeedbackIds)
+
+        // 사라진 피드백의 연속 횟수 추적
+        for disappearedId in disappeared {
+            disappearedFeedbackHistory[disappearedId, default: 0] += 1
+
+            // 5번 연속 사라지면 완료로 판단
+            if disappearedFeedbackHistory[disappearedId]! >= disappearedThreshold {
+                if let completedItem = self.instantFeedback.first(where: { $0.id == disappearedId }) {
+                    let completed = CompletedFeedback(item: completedItem, completedAt: Date())
+                    DispatchQueue.main.async {
+                        self.completedFeedbacks.append(completed)
+                    }
+                }
+                // 완료 처리 후 히스토리 초기화
+                disappearedFeedbackHistory[disappearedId] = 0
+            }
+        }
+
+        // 다시 나타난 피드백은 히스토리 초기화
+        for (feedbackId, _) in disappearedFeedbackHistory {
+            if currentFeedbackIds.contains(feedbackId) {
+                disappearedFeedbackHistory[feedbackId] = 0
+            }
+        }
+
+        // 2초 지난 완료 피드백 제거
+        DispatchQueue.main.async {
+            self.completedFeedbacks.removeAll { !$0.shouldDisplay }
+        }
+
+        // 이전 피드백 업데이트
+        previousFeedbackIds = currentFeedbackIds
+
+        // 🆕 카테고리별 상태 계산
+        let categoryStatuses = calculateCategoryStatuses(from: stableFeedback)
+
         // 즉시 피드백 업데이트
         DispatchQueue.main.async {
             self.instantFeedback = stableFeedback
             self.perfectScore = score
             self.isPerfect = self.perfectFrameCount >= self.perfectThreshold
+            self.categoryStatuses = categoryStatuses
         }
     }
 
-    // MARK: - Helper Functions
+    // MARK: - Category Status Calculation
 
-    private func calculatePerfectScore(feedback: [FeedbackItem]) -> Double {
-        // 피드백이 없으면 완벽
-        if feedback.isEmpty {
-            return 1.0
+    /// 카테고리별 상태 계산
+    private func calculateCategoryStatuses(from feedbacks: [FeedbackItem]) -> [CategoryStatus] {
+        // 모든 카테고리에 대해 상태 생성
+        var statusMap: [FeedbackCategory: CategoryStatus] = [:]
+
+        // 각 카테고리 초기화 (모두 만족 상태로 시작)
+        for category in FeedbackCategory.allCases {
+            statusMap[category] = CategoryStatus(
+                category: category,
+                isSatisfied: true,
+                activeFeedbacks: []
+            )
         }
 
-        // 각 피드백의 완성도 계산
-        var totalScore = 0.0
-        var count = 0
+        // 피드백이 있는 카테고리는 불만족 상태로 변경
+        for feedback in feedbacks {
+            if let category = FeedbackCategory.from(categoryString: feedback.category) {
+                var activeFeedbacks = statusMap[category]?.activeFeedbacks ?? []
+                activeFeedbacks.append(feedback)
 
-        for fb in feedback {
-            if let current = fb.currentValue,
-               let target = fb.targetValue {
-                let diff = abs(current - target)
-                let maxDiff = max(abs(target) + 50, 100.0)  // 최대 차이
-                let itemScore = max(0.0, 1.0 - (diff / maxDiff))
-                totalScore += itemScore
-                count += 1
+                statusMap[category] = CategoryStatus(
+                    category: category,
+                    isSatisfied: false,
+                    activeFeedbacks: activeFeedbacks.sorted { $0.priority < $1.priority }
+                )
             }
         }
 
-        if count == 0 {
-            return 0.0
-        }
-
-        // 평균 점수
-        return totalScore / Double(count)
-    }
-
-    private func calculateBrightness(_ cgImage: CGImage) -> Float {
-        // 간단한 밝기 계산 (샘플링)
-        let width = min(cgImage.width, 100)  // 샘플링으로 속도 향상
-        let height = min(cgImage.height, 100)
-
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return 0.5 }
-
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        guard let data = context.data else { return 0.5 }
-
-        let buffer = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
-        var totalBrightness: Float = 0
-
-        for i in stride(from: 0, to: width * height * 4, by: 4) {
-            let r = Float(buffer[i]) / 255.0
-            let g = Float(buffer[i + 1]) / 255.0
-            let b = Float(buffer[i + 2]) / 255.0
-            totalBrightness += (r + g + b) / 3.0
-        }
-
-        return totalBrightness / Float(width * height)
-    }
-
-    private func calculateTilt(_ cgImage: CGImage) -> Float {
-        // 간단한 기울기 추정 (엣지 검출 기반)
-        // 실제로는 더 복잡한 알고리즘 필요하지만 속도를 위해 간단하게
-        return 0.0  // TODO: 구현 필요
-    }
-
-    private func estimateBodyRect(from faceRect: CGRect?) -> CGRect? {
-        // 얼굴 위치로부터 전신 영역 추정
-        guard let face = faceRect else { return nil }
-
-        // 일반적으로 얼굴이 전신의 1/7 정도
-        let bodyWidth = face.width * 3
-        let bodyHeight = face.height * 7
-        let bodyX = face.midX - bodyWidth / 2
-        let bodyY = face.minY  // 얼굴 아래로 확장
-
-        return CGRect(x: bodyX, y: bodyY, width: bodyWidth, height: bodyHeight)
-    }
-
-    // MARK: - 포즈 및 각도 분석 헬퍼
-
-    // 🆕 신뢰도 포함 키포인트 추출
-    private func extractPoseKeypoints(from observation: VNHumanBodyPoseObservation?) -> [(point: CGPoint, confidence: Float)]? {
-        guard let observation = observation else { return nil }
-
-        var keypoints: [(point: CGPoint, confidence: Float)] = []
-
-        // VNHumanBodyPoseObservation의 주요 키포인트 추출
-        let jointNames: [VNHumanBodyPoseObservation.JointName] = [
-            .nose,           // 0: 코
-            .leftEye,        // 1: 왼쪽 눈
-            .rightEye,       // 2: 오른쪽 눈
-            .leftEar,        // 3: 왼쪽 귀
-            .rightEar,       // 4: 오른쪽 귀
-            .leftShoulder,   // 5: 왼쪽 어깨
-            .rightShoulder,  // 6: 오른쪽 어깨
-            .leftElbow,      // 7: 왼쪽 팔꿈치
-            .rightElbow,     // 8: 오른쪽 팔꿈치
-            .leftWrist,      // 9: 왼쪽 손목
-            .rightWrist,     // 10: 오른쪽 손목
-            .leftHip,        // 11: 왼쪽 골반
-            .rightHip,       // 12: 오른쪽 골반
-            .leftKnee,       // 13: 왼쪽 무릎
-            .rightKnee,      // 14: 오른쪽 무릎
-            .leftAnkle,      // 15: 왼쪽 발목
-            .rightAnkle      // 16: 오른쪽 발목
-        ]
-
-        for jointName in jointNames {
-            if let point = try? observation.recognizedPoint(jointName) {
-                keypoints.append((point: point.location, confidence: point.confidence))
-            } else {
-                keypoints.append((point: .zero, confidence: 0.0))  // 감지 실패
-            }
-        }
-
-        return keypoints.isEmpty ? nil : keypoints
+        // 우선순위 순서로 정렬하여 반환
+        return Array(statusMap.values).sorted { $0.priority < $1.priority }
     }
 
     // 🗑️ 구식 함수들 제거됨 (새 컴포넌트로 대체)
+    // - calculatePerfectScore() → GapAnalyzer.calculateCompletionScore() 사용
+    // - calculateBrightness() → VisionAnalyzer.calculateBrightness() 사용
+    // - calculateTilt() → CameraAngleDetector.detectDutchTilt() 사용
+    // - estimateBodyRect() → VisionAnalyzer.estimateBodyRect() 사용
+    // - extractPoseKeypoints() → VisionAnalyzer 내부 사용
     // - estimateCameraAngle() → CameraAngleDetector 사용
     // - comparePoseKeypoints() → AdaptivePoseComparator 사용
     // - calculateAngle() → AdaptivePoseComparator 내부 사용

@@ -116,7 +116,7 @@ class DepthEstimator {
         }
 
         // 줌 사용 여부 판단
-        let (isZoomChange, isDistanceChange) = detectDistanceChange(
+        let (isZoomChange, _) = detectDistanceChange(
             reference: reference,
             current: current
         )

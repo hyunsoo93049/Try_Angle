@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 // MARK: - 피드백 생성기
 class FeedbackGenerator {
@@ -50,15 +51,26 @@ class FeedbackGenerator {
            refPose.count >= 17,
            curPose.count >= 17 {
 
-            let poseComparison = poseComparator.comparePoses(
+            // 레퍼런스와 현재 프레임 모두 분석
+            let referencePoseComparison = poseComparator.comparePoses(
+                referenceKeypoints: refPose,
+                currentKeypoints: refPose  // 레퍼런스 자체 분석
+            )
+
+            let currentPoseComparison = poseComparator.comparePoses(
                 referenceKeypoints: refPose,
                 currentKeypoints: curPose
             )
 
-            let poseFeedbacks = poseComparator.generateFeedback(from: poseComparison)
+            // 레퍼런스 결과도 함께 전달
+            let poseFeedbacks = poseComparator.generateFeedback(
+                from: currentPoseComparison,
+                referenceResult: referencePoseComparison
+            )
+
             for (message, category) in poseFeedbacks {
                 feedbacks.append(FeedbackItem(
-                    priority: 6,
+                    priority: 1,  // 🔥 포즈가 최우선!
                     icon: "💪",
                     message: message,
                     category: category,
@@ -117,6 +129,12 @@ class FeedbackGenerator {
         case .composition:
             return generateCompositionFeedback(gap: gap, reference: reference, current: current)
 
+        case .aspectRatio:
+            return generateAspectRatioFeedback(gap: gap)
+
+        case .excessivePadding:
+            return generatePaddingFeedback(gap: gap)
+
         default:
             return nil
         }
@@ -168,7 +186,7 @@ class FeedbackGenerator {
             return FeedbackItem(
                 priority: gap.priority,
                 icon: "↔️",
-                message: "좌우 위치 조정",
+                message: "좌우 위치를 맞춰주세요",
                 category: "position_x",
                 currentValue: nil,
                 targetValue: nil,
@@ -177,11 +195,12 @@ class FeedbackGenerator {
             )
         }
 
-        let direction = current > target ? "왼쪽으로" : "오른쪽으로"
+        // current > target: 화면에서 오른쪽에 있음 → 왼쪽으로 이동 필요
+        let direction = current > target ? "왼쪽" : "오른쪽"
         return FeedbackItem(
             priority: gap.priority,
             icon: "↔️",
-            message: "\(direction) 이동",
+            message: "\(direction)으로 서주세요",
             category: "position_x",
             currentValue: current,
             targetValue: target,
@@ -196,7 +215,7 @@ class FeedbackGenerator {
             return FeedbackItem(
                 priority: gap.priority,
                 icon: "↕️",
-                message: "상하 위치 조정",
+                message: "상하 위치를 맞춰주세요",
                 category: "position_y",
                 currentValue: nil,
                 targetValue: nil,
@@ -205,11 +224,15 @@ class FeedbackGenerator {
             )
         }
 
-        let direction = current > target ? "아래로" : "위로"
+        // 🔄 카메라 움직임 기준으로 피드백
+        // Vision 좌표계: Y가 위로 갈수록 증가
+        // current > target: 인물이 더 위에 있음 → 카메라를 위로 (인물을 아래로)
+        // current < target: 인물이 더 아래에 있음 → 카메라를 아래로 (인물을 위로)
+        let cameraDirection = current > target ? "위로" : "아래로"
         return FeedbackItem(
             priority: gap.priority,
-            icon: "↕️",
-            message: "\(direction) 이동",
+            icon: "📷",
+            message: "카메라를 \(cameraDirection) 이동하세요",
             category: "position_y",
             currentValue: current,
             targetValue: target,
@@ -250,7 +273,7 @@ class FeedbackGenerator {
         return FeedbackItem(
             priority: gap.priority,
             icon: "📐",
-            message: "\(direction)으로 회전 (더치 틸트)",
+            message: "카메라를 \(direction)으로 기울여주세요",
             category: "tilt",
             currentValue: current,
             targetValue: target,
@@ -278,7 +301,7 @@ class FeedbackGenerator {
         return FeedbackItem(
             priority: gap.priority,
             icon: "👤",
-            message: "얼굴을 \(direction)으로",
+            message: "고개를 \(direction)으로 돌려주세요",
             category: "face_yaw",
             currentValue: current,
             targetValue: target,
@@ -318,7 +341,7 @@ class FeedbackGenerator {
     private func generateGazeFeedback(gap: Gap) -> FeedbackItem? {
         guard let metadata = gap.metadata,
               let refGaze = metadata["reference_gaze"] as? GazeDirection,
-              let curGaze = metadata["current_gaze"] as? GazeDirection else {
+              let _ = metadata["current_gaze"] as? GazeDirection else {
             return nil
         }
 
@@ -376,7 +399,7 @@ class FeedbackGenerator {
         let refPosition = CGPoint(x: refFace.midX, y: refFace.midY)
         let curPosition = CGPoint(x: curFace.midX, y: curFace.midY)
 
-        let (message, xDir, yDir) = compositionAnalyzer.generateCompositionFeedback(
+        let (message, _, _) = compositionAnalyzer.generateCompositionFeedback(
             referenceType: refComp,
             referencePosition: refPosition,
             currentPosition: curPosition
@@ -391,6 +414,66 @@ class FeedbackGenerator {
             targetValue: nil,
             tolerance: nil,
             unit: nil
+        )
+    }
+
+    /// 화면 비율 피드백 생성
+    private func generateAspectRatioFeedback(gap: Gap) -> FeedbackItem? {
+        guard let metadata = gap.metadata,
+              let refRatio = metadata["reference_ratio"] as? CameraAspectRatio,
+              let curRatio = metadata["current_ratio"] as? CameraAspectRatio else {
+            return nil
+        }
+
+        let message = "화면 비율을 \(refRatio.displayName)로 변경하세요 (현재: \(curRatio.displayName))"
+
+        return FeedbackItem(
+            priority: gap.priority,
+            icon: "📐",
+            message: message,
+            category: "aspect_ratio",
+            currentValue: nil,
+            targetValue: nil,
+            tolerance: nil,
+            unit: nil
+        )
+    }
+
+    /// 여백 피드백 생성
+    private func generatePaddingFeedback(gap: Gap) -> FeedbackItem? {
+        guard let metadata = gap.metadata,
+              let top = metadata["top"] as? CGFloat,
+              let bottom = metadata["bottom"] as? CGFloat,
+              let left = metadata["left"] as? CGFloat,
+              let right = metadata["right"] as? CGFloat else {
+            return nil
+        }
+
+        // 가장 큰 여백 방향 찾기
+        let paddings = [
+            ("상단", top),
+            ("하단", bottom),
+            ("좌측", left),
+            ("우측", right)
+        ]
+        let maxPadding = paddings.max(by: { $0.1 < $1.1 })!
+
+        let message: String
+        if maxPadding.1 > 0.15 {
+            message = "\(maxPadding.0) 여백이 너무 많습니다. 줌인하거나 위치를 조정하세요"
+        } else {
+            message = "불필요한 여백을 줄이세요 (줌인 또는 위치 조정)"
+        }
+
+        return FeedbackItem(
+            priority: gap.priority,
+            icon: "↔️",
+            message: message,
+            category: "padding",
+            currentValue: gap.current,
+            targetValue: gap.target,
+            tolerance: gap.tolerance,
+            unit: "%"
         )
     }
 }
