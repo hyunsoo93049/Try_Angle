@@ -60,17 +60,17 @@ struct ContentView: View {
             showCaptureFlash = true
         }
 
-        // 선택한 비율로 크롭
-        let croppedImage = cropImage(currentFrame, to: selectedAspectRatio)
+        // 1️⃣ 먼저 픽셀 데이터를 실제로 회전 (orientation .right → 실제 세로 픽셀)
+        let rotatedImage = currentFrame.fixedOrientation()
 
-        // 저장을 위해 orientation을 .up으로 고정 (실제 회전)
-        let fixedImage = croppedImage.fixedOrientation()
+        // 2️⃣ 회전된 이미지를 선택한 비율로 크롭 (이제 픽셀이 세로이므로 올바르게 자름)
+        let croppedImage = cropImage(rotatedImage, to: selectedAspectRatio)
 
         // 이미지 저장
-        capturedImage = fixedImage
+        capturedImage = croppedImage
 
-        // 🔧 사진 앨범에 저장 (방향 정보 유지)
-        saveImageToPhotoLibrary(fixedImage)
+        // 🔧 사진 앨범에 저장
+        saveImageToPhotoLibrary(croppedImage)
 
         // 플래시 효과 제거
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
