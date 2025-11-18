@@ -1,10 +1,21 @@
 # TryAngle 패치 노트
 
-## v1.4.1 - 2025-11-18 21:18
+## v1.4.1 - 2025-11-18 21:23
 
 ### 🔧 버그 수정 및 시스템 개선
 
-#### 1. 비율 감지 시스템 수정 (중요)
+#### 1. Vision 좌표계 오류 수정 (매우 중요 🔥)
+- **문제**: "아래로 이동하세요" 메시지에 오른쪽으로 움직여야 맞음
+  - iPhone 카메라 센서가 landscape로 장착되어 좌표계 90도 회전
+  - VNImageRequestHandler에 이미지 orientation 미전달
+  - Vision이 센서 기준 좌표계 사용 → X/Y축 뒤바뀜
+- **해결**: 모든 Vision 요청에 이미지 orientation 전달
+  - UIImage.cgImageOrientation extension 추가
+  - VisionAnalyzer의 모든 요청에 orientation 파라미터 추가
+  - 화면 좌표계와 Vision 좌표계 완전 일치
+  - 위/아래/좌/우 피드백이 올바르게 작동
+
+#### 2. 비율 감지 시스템 수정 (중요)
 - **문제**: 세로 사진의 비율이 잘못 감지됨
   - 16:9 세로 사진 (1080x1920) → 0.56으로 계산되어 1:1로 오인식
   - UIImage.size가 EXIF orientation이 적용된 크기를 반환
@@ -28,6 +39,8 @@
   - 위아래 마스크로 촬영 범위 명확히 표시
 
 ### 📋 기술적 변경사항
+- Extensions/UIImage+Orientation.swift: cgImageOrientation 추가
+- Services/Analysis/VisionAnalyzer.swift: 모든 Vision 요청에 orientation 전달
 - Models/Feedback.swift: `CameraAspectRatio.detect()` 로직 개선
 - Services/RealtimeAnalyzer.swift: 방향 감지 → 비율 비교로 전환
 - ContentView.swift: 4:3 비율 계산 수정, DeviceOrientationManager 제거
