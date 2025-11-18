@@ -91,21 +91,45 @@ class CameraAngleDetector {
             return nil  // 일치하면 피드백 없음
         }
 
-        switch reference {
-        case .veryLow:
-            return "카메라를 더 낮춰주세요 (극로우앵글)"
-        case .low:
-            return "카메라를 낮춰주세요 (로우앵글)"
-        case .eyeLevel:
-            return "카메라를 눈높이로 맞춰주세요"
-        case .high:
-            return "카메라를 높여주세요 (하이앵글)"
-        case .veryHigh:
-            return "카메라를 더 높여주세요 (극하이앵글)"
-        case .dutch:
-            return "카메라를 기울여주세요 (더치 틸트)"
-        case .unknown:
-            return nil
+        // current가 reference보다 높은지 낮은지 비교
+        let refLevel = angleLevel(reference)
+        let curLevel = angleLevel(current)
+
+        if curLevel > refLevel {
+            // 현재가 더 높음 → 카메라를 낮춰야 함
+            let diff = curLevel - refLevel
+            if diff >= 2 {
+                return "카메라를 많이 낮춰주세요"
+            } else {
+                return "카메라를 조금 낮춰주세요"
+            }
+        } else if curLevel < refLevel {
+            // 현재가 더 낮음 → 카메라를 높여야 함
+            let diff = refLevel - curLevel
+            if diff >= 2 {
+                return "카메라를 많이 높여주세요"
+            } else {
+                return "카메라를 조금 높여주세요"
+            }
+        }
+
+        // 레벨은 같지만 dutch tilt인 경우
+        if reference == .dutch {
+            return "카메라를 기울여주세요"
+        }
+
+        return nil
+    }
+
+    /// 앵글의 높이 레벨 (낮은 순서)
+    private func angleLevel(_ angle: CameraAngle) -> Int {
+        switch angle {
+        case .veryLow: return 1
+        case .low: return 2
+        case .eyeLevel: return 3
+        case .high: return 4
+        case .veryHigh: return 5
+        case .dutch, .unknown: return 3  // 중간으로 간주
         }
     }
 
@@ -139,19 +163,19 @@ class CameraAngleDetector {
         // 얼굴 랜드마크 추출
         guard let leftEye = landmarks.leftEye,
               let rightEye = landmarks.rightEye,
-              let nose = landmarks.nose,
+              let _ = landmarks.nose,
               let outerLips = landmarks.outerLips else {
             return .unknown
         }
 
         // 평균 Y 좌표 계산
         let eyeY = (averageY(leftEye.normalizedPoints) + averageY(rightEye.normalizedPoints)) / 2.0
-        let noseY = averageY(nose.normalizedPoints)
+        // let noseY = averageY(nose.normalizedPoints)
         let mouthY = averageY(outerLips.normalizedPoints)
 
         // Y 비율 계산
         // Vision 좌표계에서 Y가 높을수록 위쪽
-        let eyeToNoseRatio = (noseY - eyeY)  // 양수: 코가 눈보다 위 (정상은 아래)
+        // let eyeToNoseRatio = (noseY - eyeY)  // 양수: 코가 눈보다 위 (정상은 아래)
         let eyeToMouthRatio = (mouthY - eyeY)  // 양수: 입이 눈보다 위 (정상은 아래)
 
         // 로우앵글: 얼굴 하부(턱/입)가 더 위로 올라감 → 비율 증가

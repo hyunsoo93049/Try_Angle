@@ -101,7 +101,7 @@ class AdaptivePoseComparator {
         let comparableIndices = Set(visibleRefIndices).intersection(visibleCurIndices)
 
         // 3. 포즈 타입 자동 감지
-        let referencePoseType = detectPoseType(visibleIndices: Array(comparableIndices))
+        _ = detectPoseType(visibleIndices: Array(comparableIndices))
         let currentPoseType = detectPoseType(visibleIndices: Array(comparableIndices))
 
         // 4. 보이는/안 보이는 그룹 분류
@@ -186,43 +186,77 @@ class AdaptivePoseComparator {
     }
 
     /// 포즈 비교 결과로부터 피드백 생성
-    /// - Parameter result: 비교 결과
+    /// - Parameters:
+    ///   - currentResult: 현재 프레임의 비교 결과
+    ///   - referenceResult: 레퍼런스의 비교 결과 (어떤 부위가 있는지 확인용)
     /// - Returns: 피드백 아이템 배열
-    func generateFeedback(from result: PoseComparisonResult) -> [(message: String, category: String)] {
+    func generateFeedback(
+        from currentResult: PoseComparisonResult,
+        referenceResult: PoseComparisonResult
+    ) -> [(message: String, category: String)] {
         var feedback: [(message: String, category: String)] = []
 
-        // 1. 안 보이는 부위 안내
-        if !result.missingGroups.isEmpty {
-            let missingNames = result.missingGroups.map { groupName($0) }.joined(separator: ", ")
-            feedback.append((
-                message: "\(missingNames)이(가) 화면에 없어 비교할 수 없습니다",
-                category: "pose_missing_parts"
-            ))
+        // 1. 레퍼런스와 현재 모두에서 보이는 부위만 비교
+        let referenceVisibleGroups = Set(referenceResult.visibleGroups)
+        let currentVisibleGroups = Set(currentResult.visibleGroups)
+
+        // 레퍼런스에 있지만 현재 없는 중요 부위만 알림
+        let missingImportantGroups = referenceVisibleGroups.subtracting(currentVisibleGroups)
+
+        // 포즈 타입별로 중요한 부위 정의
+        let importantGroups: Set<KeypointGroup>
+        switch referenceResult.poseType {
+        case .fullBody:
+            importantGroups = [.head, .shoulders, .arms, .torso, .legs]
+        case .upperBody:
+            importantGroups = [.head, .shoulders, .arms, .torso]
+        case .portrait:
+            importantGroups = [.head, .shoulders]
+        case .unknown:
+            importantGroups = []
         }
 
-        // 2. 각도 차이 피드백
+        // 중요한 부위 중 빠진 것만 피드백
+        let actuallyMissing = missingImportantGroups.intersection(importantGroups)
+
+        if !actuallyMissing.isEmpty && actuallyMissing.count > 1 {
+            // 너무 많은 부위가 안 보이면 전체적인 피드백
+            feedback.append((
+                message: "화면에 포즈가 잘 보이도록 조정해주세요",
+                category: "pose_not_visible"
+            ))
+            return feedback  // 포즈가 제대로 안 보이면 다른 피드백 생략
+        }
+
+        // 2. 🔄 각도 차이 피드백 (구체적인 각도 정보 포함)
         let angleTolerance: Float = 15.0  // 15도 허용
 
-        if let leftArmDiff = result.angleDifferences["left_arm"],
-           leftArmDiff > angleTolerance {
-            let message = leftArmDiff > 0 ? "왼팔 각도 조정" : "왼팔 각도 조정"
+        if let leftArmDiff = currentResult.angleDifferences["left_arm"],
+           abs(leftArmDiff) > angleTolerance {
+            let direction = leftArmDiff > 0 ? "더 올려주세요" : "더 내려주세요"
+            let message = "왼팔을 \(direction) (약 \(Int(abs(leftArmDiff)))도)"
             feedback.append((message: message, category: "pose_left_arm"))
         }
 
-        if let rightArmDiff = result.angleDifferences["right_arm"],
-           rightArmDiff > angleTolerance {
-            let message = rightArmDiff > 0 ? "오른팔 각도 조정" : "오른팔 각도 조정"
+        if let rightArmDiff = currentResult.angleDifferences["right_arm"],
+           abs(rightArmDiff) > angleTolerance {
+            let direction = rightArmDiff > 0 ? "더 올려주세요" : "더 내려주세요"
+            let message = "오른팔을 \(direction) (약 \(Int(abs(rightArmDiff)))도)"
             feedback.append((message: message, category: "pose_right_arm"))
         }
 
-        if let leftLegDiff = result.angleDifferences["left_leg"],
-           leftLegDiff > angleTolerance {
-            feedback.append((message: "왼다리 각도 조정", category: "pose_left_leg"))
+        if let leftLegDiff = currentResult.angleDifferences["left_leg"],
+           abs(leftLegDiff) > angleTolerance {
+            let direction = leftLegDiff > 0 ? "더 굽혀주세요" : "더 펴주세요"
+            let message = "왼다리를 \(direction) (약 \(Int(abs(leftLegDiff)))도)"
+            feedback.append((message: message, category: "pose_left_leg"))
         }
 
-        if let rightLegDiff = result.angleDifferences["right_leg"],
-           rightLegDiff > angleTolerance {
-            feedback.append((message: "오른다리 각도 조정", category: "pose_right_leg"))
+        if let rightLegDiff = currentResult.angleDifferences["right_leg"],
+           abs(rightLegDiff) > angleTolerance {
+            let direction = rightLegDiff > 0 ? "더 굽혀주세요" : "더 펴주세요"
+            let message = "오른다리를 \(direction) (약 \(Int(abs(rightLegDiff)))도)"
+            feedback.append((message: message, category: "pose_right_leg"))
         }
 
         return feedback

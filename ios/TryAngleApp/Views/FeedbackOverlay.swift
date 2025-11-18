@@ -2,37 +2,69 @@ import SwiftUI
 
 struct FeedbackOverlay: View {
     let feedbackItems: [FeedbackItem]
+    let categoryStatuses: [CategoryStatus]  // 🆕 카테고리 상태
+    let completedFeedbacks: [CompletedFeedback]  // 🆕 완료된 피드백
     let processingTime: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 상단: 처리 시간
-            HStack {
-                Spacer()
-                Text("⚡ \(processingTime)")
-                    .font(.caption)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(8)
+        ZStack {
+            // 왼쪽 중간: 카테고리 체크리스트
+            if !categoryStatuses.isEmpty {
+                VStack {
+                    Spacer()
+                    HStack {
+                        CategoryChecklistView(categoryStatuses: categoryStatuses)
+                            .padding(.leading, 16)
+                        Spacer()
+                    }
+                    Spacer()
+                }
             }
-            .padding(.top, 60)
-            .padding(.trailing, 16)
 
-            Spacer()
+            // 기존 레이아웃: 상단 + 하단 피드백
+            VStack(alignment: .leading, spacing: 12) {
+                // 상단: 처리 시간
+                HStack {
+                    Spacer()
+                    Text("⚡ \(processingTime)")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(8)
+                }
+                .padding(.top, 60)
+                .padding(.trailing, 16)
 
-            // 하단: 피드백 리스트
-            if !feedbackItems.isEmpty {
+                Spacer()
+
+                // 하단: 피드백 리스트 (우선순위 높은 것만 3개)
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(feedbackItems.prefix(5)) { item in
-                        FeedbackItemView(item: item)
+                    // 🆕 완료된 피드백들 (먼저 표시)
+                    ForEach(completedFeedbacks) { completed in
+                        CompletedFeedbackView(completed: completed)
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                            .id(completed.id)  // 고유 ID로 애니메이션 추적
+                    }
+
+                    // 진행 중인 피드백들
+                    if !feedbackItems.isEmpty {
+                        ForEach(feedbackItems.prefix(3)) { item in
+                            FeedbackItemView(item: item)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                                .id(item.id)
+                        }
                     }
                 }
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: completedFeedbacks.map { $0.id })
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: feedbackItems.map { $0.id })
                 .padding(.horizontal, 16)
                 .padding(.bottom, 120)
             }
-            // 피드백 없을 때는 아무것도 표시하지 않음 (레퍼런스 선택 전일 수 있음)
         }
     }
 
@@ -178,29 +210,171 @@ struct FeedbackItemView: View {
     }
 }
 
+// MARK: - 완료된 피드백 뷰 (초록색 + 페이드아웃)
+struct CompletedFeedbackView: View {
+    let completed: CompletedFeedback
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // 체크 아이콘
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title2)
+                .foregroundColor(.white)
+
+            Text(completed.item.icon)
+                .font(.title2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(completed.item.message)
+                    .font(.body)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+
+                Text("완료!")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            Color.green.opacity(0.9)
+                .overlay(
+                    Color.white.opacity(0.2)
+                        .frame(width: 4),
+                    alignment: .leading
+                )
+        )
+        .cornerRadius(12)
+        .shadow(color: .green.opacity(0.5), radius: 10, x: 0, y: 5)
+        .opacity(completed.fadeProgress)
+        .scaleEffect(completed.fadeProgress * 0.1 + 0.9)  // 살짝 작아지면서 사라짐
+    }
+}
+
+// MARK: - 카테고리 체크리스트 뷰
+struct CategoryChecklistView: View {
+    let categoryStatuses: [CategoryStatus]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(categoryStatuses) { status in
+                CategoryCheckItem(status: status)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black.opacity(0.75))
+                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+        )
+    }
+}
+
+// MARK: - 개별 카테고리 체크 아이템
+struct CategoryCheckItem: View {
+    let status: CategoryStatus
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // 체크 아이콘
+            Image(systemName: status.isSatisfied ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundColor(status.isSatisfied ? .green : .white.opacity(0.5))
+                .frame(width: 24, height: 24)
+                .animation(.easeInOut(duration: 0.3), value: status.isSatisfied)
+
+            // 카테고리 아이콘
+            Text(status.category.icon)
+                .font(.body)
+
+            // 카테고리 이름
+            Text(status.category.displayName)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(status.isSatisfied ? .white.opacity(0.7) : .white)
+
+            Spacer()
+
+            // 우선순위 배지 (불만족 상태일 때만)
+            if !status.isSatisfied {
+                Text("\(status.priority)")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        Circle()
+                            .fill(priorityColor(status.priority))
+                    )
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    // 우선순위별 색상
+    private func priorityColor(_ priority: Int) -> Color {
+        switch priority {
+        case 1: return .red          // 포즈
+        case 2: return .orange       // 위치
+        case 3: return .yellow       // 프레이밍
+        case 4: return .blue         // 앵글
+        case 5: return .purple       // 구도
+        case 6: return .cyan         // 시선
+        default: return .gray
+        }
+    }
+}
+
 struct FeedbackOverlay_Previews: PreviewProvider {
     static var previews: some View {
         FeedbackOverlay(
             feedbackItems: [
                 FeedbackItem(
                     priority: 1,
-                    icon: "📐",
-                    message: "왼쪽으로 기울이세요",
-                    category: "composition",
-                    currentValue: 10.0,
-                    targetValue: 0.0,
-                    tolerance: 3.0,
+                    icon: "💪",
+                    message: "왼팔을 더 올려주세요",
+                    category: "pose_left_arm",
+                    currentValue: 45.0,
+                    targetValue: 90.0,
+                    tolerance: 10.0,
                     unit: "도"
                 ),
                 FeedbackItem(
                     priority: 2,
-                    icon: "📏",
-                    message: "뒤로 가세요",
-                    category: "distance",
-                    currentValue: 1.0,
-                    targetValue: 3.0,
-                    tolerance: 0.5,
-                    unit: "걸음"
+                    icon: "📍",
+                    message: "왼쪽으로 서주세요",
+                    category: "position_x",
+                    currentValue: 55.0,
+                    targetValue: 50.0,
+                    tolerance: 5.0,
+                    unit: "%"
+                )
+            ],
+            categoryStatuses: [
+                CategoryStatus(category: .pose, isSatisfied: false, activeFeedbacks: []),
+                CategoryStatus(category: .position, isSatisfied: false, activeFeedbacks: []),
+                CategoryStatus(category: .framing, isSatisfied: true, activeFeedbacks: []),
+                CategoryStatus(category: .angle, isSatisfied: true, activeFeedbacks: []),
+                CategoryStatus(category: .composition, isSatisfied: true, activeFeedbacks: []),
+                CategoryStatus(category: .gaze, isSatisfied: true, activeFeedbacks: [])
+            ],
+            completedFeedbacks: [
+                CompletedFeedback(
+                    item: FeedbackItem(
+                        priority: 3,
+                        icon: "🔍",
+                        message: "거리 조정 완료",
+                        category: "distance",
+                        currentValue: 1.5,
+                        targetValue: 1.5,
+                        tolerance: 0.2,
+                        unit: "m"
+                    ),
+                    completedAt: Date().addingTimeInterval(-0.5)
                 )
             ],
             processingTime: "0.8s"

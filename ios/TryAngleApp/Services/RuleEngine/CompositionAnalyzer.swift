@@ -25,27 +25,27 @@ enum CompositionType: Equatable {
     var description: String {
         switch self {
         case .ruleOfThirdsLeftUpper:
-            return "3분할 왼쪽 상단"
+            return "왼쪽 위"
         case .ruleOfThirdsRightUpper:
-            return "3분할 오른쪽 상단"
+            return "오른쪽 위"
         case .ruleOfThirdsLeftLower:
-            return "3분할 왼쪽 하단"
+            return "왼쪽 아래"
         case .ruleOfThirdsRightLower:
-            return "3분할 오른쪽 하단"
+            return "오른쪽 아래"
         case .ruleOfThirdsCenter:
-            return "3분할 중앙"
+            return "화면 중앙"
         case .goldenRatioLeft:
-            return "황금비율 왼쪽"
+            return "조금 왼쪽"
         case .goldenRatioRight:
-            return "황금비율 오른쪽"
+            return "조금 오른쪽"
         case .goldenRatioUpper:
-            return "황금비율 상단"
+            return "조금 위쪽"
         case .goldenRatioLower:
-            return "황금비율 하단"
+            return "조금 아래쪽"
         case .centerFocus:
-            return "중앙 집중"
-        case .custom(let position):
-            return "커스텀 (\(Int(position.x * 100))%, \(Int(position.y * 100))%)"
+            return "화면 정중앙"
+        case .custom:
+            return "현재 위치"
         }
     }
 }
@@ -125,7 +125,7 @@ class CompositionAnalyzer {
 
         var xDirection: String? = nil
         var yDirection: String? = nil
-        var message = "\(referenceType.description) 구도로"
+        var message = ""
 
         // X축 방향
         if abs(xDiff) > 0.05 {  // 5% 이상 차이
@@ -134,16 +134,18 @@ class CompositionAnalyzer {
 
         // Y축 방향
         if abs(yDiff) > 0.05 {
-            yDirection = yDiff > 0 ? "아래" : "위"
+            yDirection = yDiff > 0 ? "아래쪽" : "위쪽"
         }
 
         // 방향 메시지 조합
         if let xDir = xDirection, let yDir = yDirection {
-            message += " (\(xDir) + \(yDir))"
+            message = "\(referenceType.description)쪽으로 (\(xDir) + \(yDir))"
         } else if let xDir = xDirection {
-            message += " (\(xDir)으로)"
+            message = "\(xDir)으로 이동"
         } else if let yDir = yDirection {
-            message += " (\(yDir)로)"
+            message = "\(yDir)으로 이동"
+        } else {
+            message = "\(referenceType.description) 위치 유지"
         }
 
         return (message, xDirection, yDirection)
