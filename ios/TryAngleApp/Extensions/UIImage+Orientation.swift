@@ -1,6 +1,23 @@
 import UIKit
+import ImageIO
 
 extension UIImage {
+    /// UIImage.Orientation을 CGImagePropertyOrientation으로 변환
+    var cgImageOrientation: CGImagePropertyOrientation {
+        switch imageOrientation {
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        case .upMirrored: return .upMirrored
+        case .downMirrored: return .downMirrored
+        case .leftMirrored: return .leftMirrored
+        case .rightMirrored: return .rightMirrored
+        @unknown default: return .up
+        }
+    }
+
+
     /// 이미지 방향을 올바르게 수정
     func fixedOrientation() -> UIImage {
         // 이미 올바른 방향이면 그대로 반환

@@ -40,7 +40,12 @@ class VisionAnalyzer {
     func detectFace(from image: UIImage) -> FaceAnalysisResult? {
         guard let cgImage = image.cgImage else { return nil }
 
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        // 이미지 orientation을 Vision에 전달하여 좌표계 보정
+        let handler = VNImageRequestHandler(
+            cgImage: cgImage,
+            orientation: image.cgImageOrientation,
+            options: [:]
+        )
         try? handler.perform([faceDetectionRequest])
 
         guard let observation = faceDetectionRequest.results?.first else {
@@ -63,7 +68,12 @@ class VisionAnalyzer {
     func detectPose(from image: UIImage) -> PoseAnalysisResult? {
         guard let cgImage = image.cgImage else { return nil }
 
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        // 이미지 orientation을 Vision에 전달하여 좌표계 보정
+        let handler = VNImageRequestHandler(
+            cgImage: cgImage,
+            orientation: image.cgImageOrientation,
+            options: [:]
+        )
         try? handler.perform([poseDetectionRequest])
 
         guard let observation = poseDetectionRequest.results?.first else {
@@ -87,7 +97,12 @@ class VisionAnalyzer {
         }
 
         // 두 요청을 동시에 수행 (효율적)
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        // 이미지 orientation을 Vision에 전달하여 좌표계 보정
+        let handler = VNImageRequestHandler(
+            cgImage: cgImage,
+            orientation: image.cgImageOrientation,
+            options: [:]
+        )
         try? handler.perform([faceDetectionRequest, poseDetectionRequest])
 
         // 얼굴 결과
