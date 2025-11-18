@@ -63,11 +63,14 @@ struct ContentView: View {
         // 선택한 비율로 크롭
         let croppedImage = cropImage(currentFrame, to: selectedAspectRatio)
 
+        // 저장을 위해 orientation을 .up으로 고정 (실제 회전)
+        let fixedImage = croppedImage.fixedOrientation()
+
         // 이미지 저장
-        capturedImage = croppedImage
+        capturedImage = fixedImage
 
         // 🔧 사진 앨범에 저장 (방향 정보 유지)
-        saveImageToPhotoLibrary(croppedImage)
+        saveImageToPhotoLibrary(fixedImage)
 
         // 플래시 효과 제거
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
