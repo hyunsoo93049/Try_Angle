@@ -224,11 +224,11 @@ class FeedbackGenerator {
             )
         }
 
-        // 🔄 카메라 움직임 기준으로 피드백
-        // Vision 좌표계: Y가 위로 갈수록 증가
-        // current > target: 인물이 더 위에 있음 → 카메라를 위로 (인물을 아래로)
-        // current < target: 인물이 더 아래에 있음 → 카메라를 아래로 (인물을 위로)
-        let cameraDirection = current > target ? "위로" : "아래로"
+        // 🔄 카메라 움직임 기준으로 피드백 (수정됨 ✅)
+        // Vision 좌표계: Y=0(아래), Y=1(위)
+        // current > target: 인물이 화면 위쪽에 있음 → 카메라를 아래로 내려서 인물을 중앙으로
+        // current < target: 인물이 화면 아래쪽에 있음 → 카메라를 위로 올려서 인물을 중앙으로
+        let cameraDirection = current > target ? "아래로" : "위로"
         return FeedbackItem(
             priority: gap.priority,
             icon: "📷",
@@ -269,7 +269,11 @@ class FeedbackGenerator {
             )
         }
 
-        let direction = current > target ? "왼쪽" : "오른쪽"
+        // 기울기 방향 수정 ✅
+        // atan2로 계산된 각도: 양수=반시계(왼쪽), 음수=시계(오른쪽)
+        // current > target: 더 반시계 방향 → 시계 방향(오른쪽)으로 기울여야 함
+        // current < target: 더 시계 방향 → 반시계 방향(왼쪽)으로 기울여야 함
+        let direction = current > target ? "오른쪽" : "왼쪽"
         return FeedbackItem(
             priority: gap.priority,
             icon: "📐",
