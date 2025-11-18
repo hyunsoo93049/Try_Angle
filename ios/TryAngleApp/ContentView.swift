@@ -642,8 +642,10 @@ struct AspectRatioMaskView: View {
             let captureHeight: CGFloat = {
                 switch selectedRatio {
                 case .ratio4_3:
-                    // 4:3 - 전체 화면 사용 (iPhone 카메라 센서의 기본 비율)
-                    return screenHeight
+                    // 4:3 - 세로 모드에서 4:3 비율 (width x width*4/3)
+                    // iPhone 카메라 센서의 기본 비율 (가로:세로 = 4:3)
+                    // 세로 모드에서는 너비를 기준으로 높이 계산
+                    return screenWidth * 4.0 / 3.0
 
                 case .ratio1_1:
                     // 1:1 - 정사각형, 너비를 기준으로 높이 설정
