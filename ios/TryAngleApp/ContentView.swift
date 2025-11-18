@@ -5,7 +5,6 @@ struct ContentView: View {
     // MARK: - State
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var realtimeAnalyzer = RealtimeAnalyzer()  // 실시간 분석
-    @StateObject private var orientationManager = DeviceOrientationManager()  // 🆕 디바이스 방향 감지
     @State private var referenceImage: UIImage?
     @State private var feedbackItems: [FeedbackItem] = []
     @State private var serverFeedbackItems: [FeedbackItem] = []  // 서버 피드백 (포즈 등)

@@ -20,7 +20,6 @@ struct FrameAnalysis {
     let depth: DepthResult?                         // 🆕 깊이 추정 결과
     let aspectRatio: CameraAspectRatio              // 🆕 카메라 비율
     let imagePadding: ImagePadding?                 // 🆕 여백 정보
-    let imageOrientation: ImageOrientation          // 🆕 이미지 방향 (세로/가로)
 }
 
 // 🆕 이미지 여백 정보
@@ -123,9 +122,6 @@ class RealtimeAnalyzer: ObservableObject {
     func analyzeReference(_ image: UIImage) {
         guard let cgImage = image.cgImage else { return }
 
-        // 🆕 이미지 방향 감지 (세로/가로)
-        let imageOrientation = ImageOrientation.detect(from: image)
-
         // 🆕 VisionAnalyzer로 얼굴+포즈 동시 분석
         let (faceResult, poseResult) = visionAnalyzer.analyzeFaceAndPose(from: image)
 
@@ -194,12 +190,11 @@ class RealtimeAnalyzer: ObservableObject {
             gaze: gaze,
             depth: depth,
             aspectRatio: aspectRatio,
-            imagePadding: padding,
-            imageOrientation: imageOrientation
+            imagePadding: padding
         )
 
         print("📸 레퍼런스 분석 완료:")
-        print("   - 이미지 방향: \(imageOrientation.description)")
+        print("   - 비율: \(aspectRatio.displayName)")
         print("   - 얼굴: \(faceRect != nil ? "감지됨" : "없음")")
         print("   - 얼굴 각도: yaw=\(faceYaw ?? 0), pitch=\(facePitch ?? 0)")
         print("   - 카메라 앵글: \(cameraAngle.description)")
@@ -295,9 +290,6 @@ class RealtimeAnalyzer: ObservableObject {
         // 🆕 여백 계산
         let currentPadding = calculatePadding(bodyRect: bodyRect, imageSize: currentImageSize)
 
-        // 🆕 현재 프레임 방향 감지
-        let currentOrientation = ImageOrientation.detect(from: image)
-
         // 🆕 프레이밍 분석 추가 (최우선)
         let currentFrame = FrameAnalysis(
             faceRect: faceResult?.faceRect,
@@ -313,19 +305,18 @@ class RealtimeAnalyzer: ObservableObject {
             gaze: gaze,
             depth: depth,
             aspectRatio: currentAspectRatio,
-            imagePadding: currentPadding,
-            imageOrientation: currentOrientation
+            imagePadding: currentPadding
         )
 
-        // 🆕 방향 불일치 체크 (최최우선)
-        var orientationMismatchFeedback: FeedbackItem? = nil
-        if reference.imageOrientation != currentOrientation {
-            let targetOrientation = reference.imageOrientation.description
-            orientationMismatchFeedback = FeedbackItem(
+        // 🆕 비율 불일치 체크 (최최우선)
+        var ratioMismatchFeedback: FeedbackItem? = nil
+        if reference.aspectRatio != currentAspectRatio {
+            let targetRatio = reference.aspectRatio.displayName
+            ratioMismatchFeedback = FeedbackItem(
                 priority: -1,  // 최고 우선순위
-                icon: "📱",
-                message: "핸드폰을 \(targetOrientation)로 돌려주세요",
-                category: "orientation_mismatch",
+                icon: "📐",
+                message: "카메라 비율을 \(targetRatio)로 변경하세요",
+                category: "aspect_ratio_mismatch",
                 currentValue: nil,
                 targetValue: nil,
                 tolerance: nil,
@@ -392,10 +383,10 @@ class RealtimeAnalyzer: ObservableObject {
         var stableFeedback: [FeedbackItem] = []
         var currentCategories = Set<String>()
 
-        // 🆕 방향 불일치는 히스테리시스 없이 즉시 표시 (최고 우선순위)
-        if let orientationFeedback = orientationMismatchFeedback {
-            stableFeedback.append(orientationFeedback)
-            currentCategories.insert(orientationFeedback.category)
+        // 🆕 비율 불일치는 히스테리시스 없이 즉시 표시 (최고 우선순위)
+        if let ratioFeedback = ratioMismatchFeedback {
+            stableFeedback.append(ratioFeedback)
+            currentCategories.insert(ratioFeedback.category)
         }
 
         for fb in feedbacks {
