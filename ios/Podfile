@@ -6,14 +6,8 @@ project 'TryAngleApp/TryAngleApp.xcodeproj'
 target 'TryAngleApp' do
   use_frameworks!
 
-  # TensorFlow Lite for MoveNet (will be removed)
-  pod 'TensorFlowLiteSwift', '~> 2.14.0'
-
   # ONNX Runtime Mobile for RTMPose (with CoreML EP for ANE acceleration)
   pod 'onnxruntime-mobile-c', '1.18.0'
-
-  # Or use TensorFlow Lite with Metal delegate for GPU acceleration
-  # pod 'TensorFlowLiteSwift', '~> 2.14.0', :subspecs => ['CoreML', 'Metal']
 end
 
 post_install do |installer|
