@@ -6,18 +6,26 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D23288CC430F92A9B64C560C /* Pods_TryAngleApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D35E682477250C51A7029D68 /* Pods_TryAngleApp.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		57C13229136A9EB5A4274A2B /* Pods-TryAngleApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TryAngleApp.release.xcconfig"; path = "Target Support Files/Pods-TryAngleApp/Pods-TryAngleApp.release.xcconfig"; sourceTree = "<group>"; };
 		6C46BCC82EC9CA8B00C72C0F /* TryAngleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TryAngleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C726E762EC9CDB000DDA131 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CD9B77A2ECD559F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB453F2EC9E4BF00809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB46312ECC964900809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		D05D547300DE7E259ED6865C /* Pods-TryAngleApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TryAngleApp.debug.xcconfig"; path = "Target Support Files/Pods-TryAngleApp/Pods-TryAngleApp.debug.xcconfig"; sourceTree = "<group>"; };
+		D35E682477250C51A7029D68 /* Pods_TryAngleApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_TryAngleApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		6C46BCCA2EC9CA8B00C72C0F /* TryAngleApp */ = {
+		6C46BCCA2EC9CA8B00C72C0F = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			name = TryAngleApp;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -27,17 +35,28 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D23288CC430F92A9B64C560C /* Pods_TryAngleApp.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1B4D3F5A9568AD6379ADC08B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D35E682477250C51A7029D68 /* Pods_TryAngleApp.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		6C46BCBF2EC9CA8B00C72C0F = {
 			isa = PBXGroup;
 			children = (
-				6C46BCCA2EC9CA8B00C72C0F /* TryAngleApp */,
+				6C46BCCA2EC9CA8B00C72C0F,
 				6C46BCC92EC9CA8B00C72C0F /* Products */,
+				CC23FDEEFD7623D81667F847 /* Pods */,
+				1B4D3F5A9568AD6379ADC08B /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -51,22 +70,52 @@
 		};
 		6C726E772EC9CDB000DDA131 /* Products */ = {
 			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CD9B7222ECCB1AF00CC618D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CD9B77C2ECD559F00CC618D /* Products */ = {
+			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
 		6CEB45402EC9E4BF00809755 /* Products */ = {
 			isa = PBXGroup;
+			children = (
+			);
 			name = Products;
 			sourceTree = "<group>";
 		};
 		6CEB45F52ECC7B8900809755 /* Products */ = {
 			isa = PBXGroup;
+			children = (
+			);
 			name = Products;
 			sourceTree = "<group>";
 		};
 		6CEB46322ECC964900809755 /* Products */ = {
 			isa = PBXGroup;
+			children = (
+			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CC23FDEEFD7623D81667F847 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				D05D547300DE7E259ED6865C /* Pods-TryAngleApp.debug.xcconfig */,
+				57C13229136A9EB5A4274A2B /* Pods-TryAngleApp.release.xcconfig */,
+			);
+			name = Pods;
+			path = ../Pods;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -76,6 +125,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6C46BCD32EC9CA8C00C72C0F /* Build configuration list for PBXNativeTarget "TryAngleApp" */;
 			buildPhases = (
+				F3774E771A9FDE2E6B031358 /* [CP] Check Pods Manifest.lock */,
 				6C46BCC42EC9CA8B00C72C0F /* Sources */,
 				6C46BCC52EC9CA8B00C72C0F /* Frameworks */,
 				6C46BCC62EC9CA8B00C72C0F /* Resources */,
@@ -85,11 +135,9 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				6C46BCCA2EC9CA8B00C72C0F /* TryAngleApp */,
+				6C46BCCA2EC9CA8B00C72C0F,
 			);
 			name = TryAngleApp;
-			packageProductDependencies = (
-			);
 			productName = TryAngleApp;
 			productReference = 6C46BCC82EC9CA8B00C72C0F /* TryAngleApp.app */;
 			productType = "com.apple.product-type.application";
@@ -131,6 +179,14 @@
 					ProjectRef = 6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */;
 				},
 				{
+					ProductGroup = 6CD9B77C2ECD559F00CC618D /* Products */;
+					ProjectRef = 6CD9B77A2ECD559F00CC618D /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CD9B7222ECCB1AF00CC618D /* Products */;
+					ProjectRef = 6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */;
+				},
+				{
 					ProductGroup = 6C726E772EC9CDB000DDA131 /* Products */;
 					ProjectRef = 6C726E762EC9CDB000DDA131 /* TryAngleApp.xcodeproj */;
 				},
@@ -155,6 +211,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F3774E771A9FDE2E6B031358 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-TryAngleApp-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		6C46BCC42EC9CA8B00C72C0F /* Sources */ = {
@@ -290,6 +371,7 @@
 		};
 		6C46BCD42EC9CA8C00C72C0F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D05D547300DE7E259ED6865C /* Pods-TryAngleApp.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -297,6 +379,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DQ4WG8XD63;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "TryAngleuc740 uc2e4uc2dcuac04 ucd2cuc601 uac00uc774ub4dcub97c uc81cuacf5ud558uae30 uc704ud574 uce74uba54ub77c uc811uadfcuc774 ud544uc694ud569ub2c8ub2e4.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ub808ud37cub7f0uc2a4 uc774ubbf8uc9c0ub97c uc120ud0ddud558uae30 uc704ud574 uc0acuc9c4 ub77cuc774ube0cub7ecub9ac uc811uadfcuc774 ud544uc694ud569ub2c8ub2e4.";
@@ -311,6 +394,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				NEW_SETTING = "";
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.tryangle.TryAngleApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -325,6 +410,7 @@
 		};
 		6C46BCD52EC9CA8C00C72C0F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 57C13229136A9EB5A4274A2B /* Pods-TryAngleApp.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -332,6 +418,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DQ4WG8XD63;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "TryAngleuc740 uc2e4uc2dcuac04 ucd2cuc601 uac00uc774ub4dcub97c uc81cuacf5ud558uae30 uc704ud574 uce74uba54ub77c uc811uadfcuc774 ud544uc694ud569ub2c8ub2e4.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ub808ud37cub7f0uc2a4 uc774ubbf8uc9c0ub97c uc120ud0ddud558uae30 uc704ud574 uc0acuc9c4 ub77cuc774ube0cub7ecub9ac uc811uadfcuc774 ud544uc694ud569ub2c8ub2e4.";
@@ -346,6 +433,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				NEW_SETTING = "";
+				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.tryangle.TryAngleApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

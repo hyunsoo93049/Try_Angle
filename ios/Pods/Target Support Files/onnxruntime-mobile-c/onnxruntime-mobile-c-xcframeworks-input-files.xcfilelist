@@ -1,0 +1,2 @@
+${PODS_ROOT}/Target Support Files/onnxruntime-mobile-c/onnxruntime-mobile-c-xcframeworks.sh
+${PODS_ROOT}/onnxruntime-mobile-c/onnxruntime.xcframework
