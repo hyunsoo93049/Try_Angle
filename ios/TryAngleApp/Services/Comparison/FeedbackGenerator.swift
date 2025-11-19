@@ -16,6 +16,7 @@ class FeedbackGenerator {
     ///   - gaps: Gap 목록
     ///   - reference: 레퍼런스 분석
     ///   - current: 현재 분석
+    ///   - isFrontCamera: 전면 카메라 여부 (좌우반전 적용)
     /// - Returns: 피드백 아이템 목록
     func generateFeedback(
         from gaps: [Gap],
@@ -30,7 +31,8 @@ class FeedbackGenerator {
             compositionType: CompositionType?,
             gaze: GazeResult?,
             depth: DepthResult?
-        )
+        ),
+        isFrontCamera: Bool = false
     ) -> [FeedbackItem] {
 
         var feedbacks: [FeedbackItem] = []
@@ -39,7 +41,8 @@ class FeedbackGenerator {
             if let feedback = convertGapToFeedback(
                 gap: gap,
                 reference: reference,
-                current: current
+                current: current,
+                isFrontCamera: isFrontCamera
             ) {
                 feedbacks.append(feedback)
             }
@@ -47,9 +50,23 @@ class FeedbackGenerator {
 
         // 포즈 피드백 추가 (별도 처리)
         if let refPose = reference.poseKeypoints,
-           let curPose = current.pose?.keypoints,
-           refPose.count >= 17,
-           curPose.count >= 17 {
+           refPose.count >= 17 {
+
+            // 현재 포즈가 없으면 포즈 피드백 생성 안 함
+            guard let curPose = current.pose?.keypoints,
+                  curPose.count >= 17 else {
+                print("⚠️ 현재 프레임에 포즈 없음 - 포즈 피드백 생성 안 함")
+                return feedbacks
+            }
+
+            // 레퍼런스 포즈의 신뢰도 체크 (너무 낮으면 비교 불가)
+            let refVisibleCount = refPose.filter { $0.confidence >= 0.5 }.count
+            print("🔍 레퍼런스 포즈 - 전체: \(refPose.count)개, 신뢰도 0.5 이상: \(refVisibleCount)개")
+
+            if refVisibleCount < 5 {
+                print("⚠️ 레퍼런스 포즈의 신뢰도가 너무 낮음 (\(refVisibleCount)개) - 포즈 비교 건너뜀")
+                return feedbacks
+            }
 
             // 레퍼런스와 현재 프레임 모두 분석
             let referencePoseComparison = poseComparator.comparePoses(
@@ -62,11 +79,16 @@ class FeedbackGenerator {
                 currentKeypoints: curPose
             )
 
+            print("🔍 레퍼런스 포즈 비교 결과 - 비교 가능 키포인트: \(referencePoseComparison.comparableKeypoints.count)개")
+            print("🔍 현재 포즈 비교 결과 - 비교 가능 키포인트: \(currentPoseComparison.comparableKeypoints.count)개")
+
             // 레퍼런스 결과도 함께 전달
             let poseFeedbacks = poseComparator.generateFeedback(
                 from: currentPoseComparison,
                 referenceResult: referencePoseComparison
             )
+
+            print("🔍 생성된 포즈 피드백: \(poseFeedbacks.count)개")
 
             for (message, category) in poseFeedbacks {
                 feedbacks.append(FeedbackItem(
@@ -80,6 +102,8 @@ class FeedbackGenerator {
                     unit: nil
                 ))
             }
+        } else {
+            print("⚠️ 레퍼런스에 포즈 키포인트가 없음 - 포즈 비교 건너뜀")
         }
 
         return feedbacks
@@ -101,7 +125,8 @@ class FeedbackGenerator {
             compositionType: CompositionType?,
             gaze: GazeResult?,
             depth: DepthResult?
-        )
+        ),
+        isFrontCamera: Bool
     ) -> FeedbackItem? {
 
         switch gap.type {
@@ -109,7 +134,7 @@ class FeedbackGenerator {
             return generateDistanceFeedback(gap: gap, reference: reference, current: current)
 
         case .positionX:
-            return generatePositionXFeedback(gap: gap)
+            return generatePositionXFeedback(gap: gap, isFrontCamera: isFrontCamera)
 
         case .positionY:
             return generatePositionYFeedback(gap: gap)
@@ -118,7 +143,7 @@ class FeedbackGenerator {
             return generateTiltFeedback(gap: gap, current: current)
 
         case .faceYaw:
-            return generateFaceYawFeedback(gap: gap)
+            return generateFaceYawFeedback(gap: gap, isFrontCamera: isFrontCamera)
 
         case .cameraAngle:
             return generateCameraAngleFeedback(gap: gap)
@@ -181,7 +206,7 @@ class FeedbackGenerator {
     }
 
     /// X 위치 피드백
-    private func generatePositionXFeedback(gap: Gap) -> FeedbackItem {
+    private func generatePositionXFeedback(gap: Gap, isFrontCamera: Bool) -> FeedbackItem {
         guard let current = gap.current, let target = gap.target else {
             return FeedbackItem(
                 priority: gap.priority,
@@ -195,8 +220,13 @@ class FeedbackGenerator {
             )
         }
 
-        // current > target: 화면에서 오른쪽에 있음 → 왼쪽으로 이동 필요
+        // Vision 좌표계: X=0(왼쪽), X=1(오른쪽) (전면/후면 동일)
+        // current > target: 인물이 오른쪽에 있음 → 왼쪽으로 이동
+        // current < target: 인물이 왼쪽에 있음 → 오른쪽으로 이동
+        //
+        // ⚠️ 중요: Vision 좌표는 카메라 센서 기준이므로 전면/후면 동일!
         let direction = current > target ? "왼쪽" : "오른쪽"
+
         return FeedbackItem(
             priority: gap.priority,
             icon: "↔️",
@@ -224,11 +254,14 @@ class FeedbackGenerator {
             )
         }
 
-        // 🔄 카메라 움직임 기준으로 피드백 (수정됨 ✅)
+        // 🔄 카메라 움직임 기준으로 피드백
         // Vision 좌표계: Y=0(아래), Y=1(위)
-        // current > target: 인물이 화면 위쪽에 있음 → 카메라를 아래로 내려서 인물을 중앙으로
-        // current < target: 인물이 화면 아래쪽에 있음 → 카메라를 위로 올려서 인물을 중앙으로
-        let cameraDirection = current > target ? "아래로" : "위로"
+        // current > target: 인물이 화면 위쪽에 있음
+        //   → 인물을 아래로 내리려면 카메라를 위로 올려야 함
+        // current < target: 인물이 화면 아래쪽에 있음
+        //   → 인물을 위로 올리려면 카메라를 아래로 내려야 함
+        // 🔥 수정: 반대로 되어 있던 것을 바로잡음
+        let cameraDirection = current > target ? "위로" : "아래로"
         return FeedbackItem(
             priority: gap.priority,
             icon: "📷",
@@ -287,7 +320,7 @@ class FeedbackGenerator {
     }
 
     /// 얼굴 각도 피드백
-    private func generateFaceYawFeedback(gap: Gap) -> FeedbackItem {
+    private func generateFaceYawFeedback(gap: Gap, isFrontCamera: Bool) -> FeedbackItem {
         guard let current = gap.current, let target = gap.target else {
             return FeedbackItem(
                 priority: gap.priority,
@@ -301,7 +334,19 @@ class FeedbackGenerator {
             )
         }
 
-        let direction = current > target ? "왼쪽" : "오른쪽"
+        // 🔥 Vision Yaw 좌표계 (전면/후면 동일)
+        // Yaw > 0: 얼굴이 왼쪽을 향함 (실제 물리적 방향)
+        // Yaw < 0: 얼굴이 오른쪽을 향함 (실제 물리적 방향)
+        //
+        // current > target: 현재 더 왼쪽 향함 → 오른쪽으로 돌려야 함
+        // current < target: 현재 더 오른쪽 향함 → 왼쪽으로 돌려야 함
+        //
+        // ⚠️ 중요: 전면/후면 관계없이 동일한 로직!
+        // Vision 값은 항상 실제 물리적 방향 기준
+        let direction = current > target ? "오른쪽" : "왼쪽"
+
+        // 🐛 디버그 로그
+        print("🔍 Yaw 피드백 - current: \(current)도, target: \(target)도, 방향: \(direction), 전면카메라: \(isFrontCamera)")
         return FeedbackItem(
             priority: gap.priority,
             icon: "👤",
@@ -354,8 +399,11 @@ class FeedbackGenerator {
         case .lookingAtCamera:
             message = "카메라를 바라봐주세요"
         case .lookingLeft:
+            // 🔥 주의: "왼쪽을 본다" = 카메라 관점에서 왼쪽
+            // 후면 카메라: 그대로 왼쪽
             message = "시선을 왼쪽으로"
         case .lookingRight:
+            // 후면 카메라: 그대로 오른쪽
             message = "시선을 오른쪽으로"
         case .lookingUp:
             message = "시선을 위로"
@@ -446,32 +494,39 @@ class FeedbackGenerator {
     /// 여백 피드백 생성
     private func generatePaddingFeedback(gap: Gap) -> FeedbackItem? {
         guard let metadata = gap.metadata,
-              let top = metadata["top"] as? CGFloat,
-              let bottom = metadata["bottom"] as? CGFloat,
               let left = metadata["left"] as? CGFloat,
-              let right = metadata["right"] as? CGFloat else {
+              let right = metadata["right"] as? CGFloat,
+              let refLeft = metadata["ref_left"] as? CGFloat,
+              let refRight = metadata["ref_right"] as? CGFloat else {
             return nil
         }
 
-        // 가장 큰 여백 방향 찾기
-        let paddings = [
-            ("상단", top),
-            ("하단", bottom),
-            ("좌측", left),
-            ("우측", right)
+        // 🔥 좌우 여백만 비교 (상하는 Y 위치로 해결)
+        let diffs = [
+            ("좌측", left - refLeft, left, refLeft),
+            ("우측", right - refRight, right, refRight)
         ]
-        let maxPadding = paddings.max(by: { $0.1 < $1.1 })!
 
+        // 가장 차이가 큰 방향 찾기
+        let maxDiff = diffs.max(by: { abs($0.1) < abs($1.1) })!
+
+        // 🔥 줌/거리 조정으로 해결하도록 유도
         let message: String
-        if maxPadding.1 > 0.15 {
-            message = "\(maxPadding.0) 여백이 너무 많습니다. 줌인하거나 위치를 조정하세요"
+        if abs(maxDiff.1) > 0.1 {
+            if maxDiff.1 > 0 {
+                // 현재 여백이 더 많음 → 줌인 필요
+                message = "\(maxDiff.0) 여백이 많습니다. 줌인하거나 가까이 가세요"
+            } else {
+                // 현재 여백이 더 적음 → 줌아웃 필요
+                message = "\(maxDiff.0) 여백이 부족합니다. 줌아웃하거나 멀어지세요"
+            }
         } else {
-            message = "불필요한 여백을 줄이세요 (줌인 또는 위치 조정)"
+            message = "여백 조정 필요"
         }
 
         return FeedbackItem(
             priority: gap.priority,
-            icon: "↔️",
+            icon: "📐",
             message: message,
             category: "padding",
             currentValue: gap.current,

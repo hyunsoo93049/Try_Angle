@@ -26,6 +26,7 @@ struct ContentView: View {
     // 🆕 비율 선택
     @State private var selectedAspectRatio: CameraAspectRatio = .ratio4_3
     @State private var showAspectRatioMenu = false
+    @State private var debugAlert = false
 
     // 통합 피드백 (실시간 + 서버)
     private var combinedFeedback: [FeedbackItem] {
@@ -94,24 +95,25 @@ struct ContentView: View {
 
         let imageWidth = CGFloat(cgImage.width)
         let imageHeight = CGFloat(cgImage.height)
-        let targetRatio = aspectRatio.ratio
+        let targetRatio = aspectRatio.ratio  // 가로:세로 비율 (예: 4:3 = 1.333)
 
         var cropRect: CGRect
 
-        // 이미지는 세로 모드이므로, 비율을 역수로 계산
-        let currentRatio = imageHeight / imageWidth
-        let targetVerticalRatio = 1.0 / targetRatio
+        // fixedOrientation() 후의 이미지는 세로 모드
+        // 세로 모드에서의 가로:세로 비율 계산
+        let currentRatio = imageWidth / imageHeight  // 예: 3024 / 4032 = 0.75
+        let targetVerticalRatio = 1.0 / targetRatio   // 예: 3/4 = 0.75
 
         if currentRatio > targetVerticalRatio {
-            // 이미지가 더 세로로 길면, 높이를 줄임 (위아래 크롭)
-            let targetHeight = imageWidth * targetVerticalRatio
-            let yOffset = (imageHeight - targetHeight) / 2
-            cropRect = CGRect(x: 0, y: yOffset, width: imageWidth, height: targetHeight)
-        } else {
-            // 이미지가 더 가로로 넓으면, 너비를 줄임 (좌우 크롭)
-            let targetWidth = imageHeight / targetVerticalRatio
+            // 이미지가 목표보다 더 가로로 넓으면 (또는 덜 세로로 길면), 좌우를 크롭
+            let targetWidth = imageHeight * targetVerticalRatio
             let xOffset = (imageWidth - targetWidth) / 2
             cropRect = CGRect(x: xOffset, y: 0, width: targetWidth, height: imageHeight)
+        } else {
+            // 이미지가 목표보다 더 세로로 길면, 위아래를 크롭
+            let targetHeight = imageWidth / targetVerticalRatio
+            let yOffset = (imageHeight - targetHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: imageWidth, height: targetHeight)
         }
 
         guard let croppedCGImage = cgImage.cropping(to: cropRect) else { return image }
@@ -156,8 +158,11 @@ struct ContentView: View {
                         .allowsHitTesting(false)
                 }
                 .onAppear {
+                    print("🎥🎥🎥 ContentView onAppear 호출됨 🎥🎥🎥")
+                    debugAlert = true
                     cameraManager.setupSession()
                     cameraManager.startSession()
+                    print("🎥🎥🎥 카메라 세션 시작 완료 🎥🎥🎥")
                 }
                 .onDisappear {
                     cameraManager.stopSession()
@@ -517,6 +522,76 @@ struct ContentView: View {
                     Spacer()
                 }
             }
+
+            // 🐛 디버그 오버레이 (포즈 감지 상태 표시)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        // 레퍼런스 포즈 키포인트
+                        if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints {
+                            let visibleCount = refPose.filter { $0.confidence >= 0.5 }.count
+                            let color: Color = visibleCount >= 10 ? .green : (visibleCount >= 5 ? .yellow : .red)
+                            Text("레퍼런스: \(visibleCount)/\(refPose.count)개")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(color)
+                                .padding(4)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(4)
+                        } else {
+                            Text("레퍼런스 포즈: 없음 ⚠️")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.red)
+                                .padding(4)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(4)
+                        }
+
+                        // 현재 프레임의 포즈 피드백 표시
+                        let poseFeedbacks = combinedFeedback.filter { $0.icon == "💪" }
+                        if !poseFeedbacks.isEmpty {
+                            Text("포즈 피드백: \(poseFeedbacks.count)개")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.orange)
+                                .padding(4)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(4)
+                        } else if referenceImage != nil {
+                            // 레퍼런스 포즈가 있을 때만 "일치" 표시
+                            if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints,
+                               refPose.filter({ $0.confidence >= 0.5 }).count >= 5 {
+                                Text("포즈: 일치 ✓")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.green)
+                                    .padding(4)
+                                    .background(Color.black.opacity(0.7))
+                                    .cornerRadius(4)
+                            } else {
+                                Text("포즈: 비교 불가")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.gray)
+                                    .padding(4)
+                                    .background(Color.black.opacity(0.7))
+                                    .cornerRadius(4)
+                            }
+                        }
+
+                        // 완성도 표시
+                        if referenceImage != nil {
+                            let score = Int(realtimeAnalyzer.perfectScore * 100)
+                            Text("완성도: \(score)%")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(score > 100 ? .red : .white)
+                                .padding(4)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(4)
+                        }
+                    }
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 120)
+                }
+            }
         }
         .onChange(of: realtimeAnalyzer.isPerfect) { isPerfect in
             if isPerfect && autoCapture && capturedImage == nil {
@@ -528,8 +603,13 @@ struct ContentView: View {
 
             // 비율 변경시 즉시 프레임 재분석하여 피드백 갱신
             if let currentFrame = cameraManager.currentFrame {
-                realtimeAnalyzer.analyzeFrame(currentFrame)
+                realtimeAnalyzer.analyzeFrame(currentFrame, isFrontCamera: cameraManager.isFrontCamera)
             }
+        }
+        .alert("앱 초기화 완료", isPresented: $debugAlert) {
+            Button("확인") { }
+        } message: {
+            Text("ContentView가 정상적으로 로드되었습니다.\n\n디버그 로그:\n1. Xcode 콘솔 확인\n2. /tmp/xcode_console_fix.txt 참고\n3. Documents/pose_debug.txt 파일 확인\n\n오른쪽 하단에서 포즈 감지 상태를 실시간으로 확인할 수 있습니다.")
         }
     }
 
@@ -543,7 +623,7 @@ struct ContentView: View {
         // 🔄 10fps로 프레임 분석 (100ms마다) - 민감도 감소
         frameUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
             if let currentFrame = cameraManager.currentFrame {
-                realtimeAnalyzer.analyzeFrame(currentFrame)
+                realtimeAnalyzer.analyzeFrame(currentFrame, isFrontCamera: cameraManager.isFrontCamera)
             }
         }
     }
@@ -578,7 +658,7 @@ struct ContentView: View {
         processingTime = ""
     }
 
-    /// 실제 분석 수행
+    /// 실제 분석 수행 (V1: 온디바이스만 사용, 서버 연결 비활성화)
     private func performAnalysis() async {
         // 분석 모드가 꺼져있으면 스킵
         guard analysisEnabled else {
@@ -591,39 +671,22 @@ struct ContentView: View {
             return
         }
 
-        guard let refImage = referenceImage,
-              let currentFrame = cameraManager.currentFrame else {
+        guard referenceImage != nil,
+              cameraManager.currentFrame != nil else {
             return
         }
 
         isAnalyzing = true
         errorMessage = nil
 
-        do {
-            let response = try await APIService.shared.analyzeFrame(
-                referenceImage: refImage,
-                currentFrame: currentFrame
-            )
+        // V1: 온디바이스 분석만 사용 (서버 연결 안 함)
+        // RealtimeAnalyzer가 모든 분석을 처리함 (YOLO + MoveNet + Vision)
+        // serverFeedbackItems는 사용하지 않음 (combinedFeedback에서 realtimeAnalyzer.instantFeedback만 사용)
 
-            // UI 업데이트 (메인 스레드)
-            await MainActor.run {
-                serverFeedbackItems = response.userFeedback  // 서버 피드백 별도 저장
-                processingTime = response.processingTime
-
-                // 카메라 설정 자동 적용 비활성화 (초록색 문제 때문에)
-                // TODO: 설정을 수동으로 조정할 수 있는 UI 추가
-                // if analysisEnabled {
-                //     cameraManager.applyCameraSettings(response.cameraSettings)
-                // }
-
-                isAnalyzing = false
-            }
-
-        } catch {
-            await MainActor.run {
-                errorMessage = "서버 연결 실패: \(error.localizedDescription)"
-                isAnalyzing = false
-            }
+        await MainActor.run {
+            serverFeedbackItems = []  // 서버 피드백 비우기
+            processingTime = "On-Device"  // 온디바이스 표시
+            isAnalyzing = false
         }
     }
 }

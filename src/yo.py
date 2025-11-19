@@ -24,7 +24,7 @@ depth_estimator = pipeline(
 print("✅ 모델 로딩 완료!\n")
 
 # 이미지 로드
-image_path = PROJECT_ROOT / "data" / "sample_images" / "p1.jpg"
+image_path = PROJECT_ROOT / "data" / "test_images" / "test9.jpeg"
 image = cv2.imread(str(image_path))
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 h, w = image.shape[:2]

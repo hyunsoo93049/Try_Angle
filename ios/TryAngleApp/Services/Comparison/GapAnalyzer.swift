@@ -217,22 +217,49 @@ class GapAnalyzer {
             ))
         }
 
-        // 11. 🆕 과도한 여백 Gap
-        if let padding = current.padding, padding.hasExcessivePadding {
-            gaps.append(Gap(
-                type: .excessivePadding,
-                current: Double(padding.total * 100),
-                target: 0.0,
-                difference: Double(padding.total * 100),
-                tolerance: 15.0,  // 15% 이하는 허용
-                priority: 3,  // 프레이밍 카테고리
-                metadata: [
-                    "top": padding.top,
-                    "bottom": padding.bottom,
-                    "left": padding.left,
-                    "right": padding.right
-                ]
-            ))
+        // 11. 🆕 여백 Gap (레퍼런스와 비교)
+        // 🔥 X 위치 Gap이 있으면 좌우 여백 Gap 무시 (위치 조정이 여백도 해결함)
+        let hasPositionXGap = gaps.contains { $0.type == .positionX }
+
+        if let refPadding = reference.imagePadding, let curPadding = current.padding {
+            // 좌우 여백 차이만 계산 (상하는 Y 위치로 해결)
+            let leftDiff = abs(refPadding.left - curPadding.left)
+            let rightDiff = abs(refPadding.right - curPadding.right)
+            let horizontalDiff = max(leftDiff, rightDiff)
+
+            var shouldCreateGap = false
+            var maxDiff: CGFloat = 0
+
+            // 좌우 여백만 체크 (X 위치 Gap 없으면)
+            if !hasPositionXGap && horizontalDiff > 0.1 {
+                shouldCreateGap = true
+                maxDiff = horizontalDiff
+            }
+
+            // 상하 여백은 무시 (Y 위치로 해결)
+            // 거리/줌으로만 해결하도록 유도
+
+            // 10% 이상 차이나고, 위치 Gap과 충돌하지 않으면 생성
+            if shouldCreateGap {
+                gaps.append(Gap(
+                    type: .excessivePadding,
+                    current: Double(curPadding.total * 100),
+                    target: Double(refPadding.total * 100),
+                    difference: Double(maxDiff * 100),
+                    tolerance: 10.0,  // 10% 이하는 허용
+                    priority: 3,  // 프레이밍 카테고리
+                    metadata: [
+                        "top": curPadding.top,
+                        "bottom": curPadding.bottom,
+                        "left": curPadding.left,
+                        "right": curPadding.right,
+                        "ref_top": refPadding.top,
+                        "ref_bottom": refPadding.bottom,
+                        "ref_left": refPadding.left,
+                        "ref_right": refPadding.right
+                    ]
+                ))
+            }
         }
 
         return gaps
@@ -250,19 +277,33 @@ class GapAnalyzer {
         var count = 0
 
         for gap in gaps {
-            if let _ = gap.current, let target = gap.target {
-                let maxDiff = max(abs(target) + 50, 100.0)
-                let itemScore = max(0.0, 1.0 - (gap.difference / maxDiff))
-                totalScore += itemScore
-                count += 1
+            // tolerance 내에 있으면 1.0점, 아니면 차이에 비례하여 감점
+            let itemScore: Double
+            if gap.isWithinTolerance {
+                itemScore = 1.0
+            } else {
+                // tolerance를 넘어선 차이만 감점 대상
+                let excessDiff = gap.difference - gap.tolerance
+
+                if let _ = gap.current, let target = gap.target {
+                    let maxDiff = max(abs(target) + gap.tolerance + 50, 100.0)
+                    itemScore = max(0.0, 1.0 - (excessDiff / maxDiff))
+                } else {
+                    // current/target 없는 경우 (카테고리 불일치 등)
+                    itemScore = 0.0
+                }
             }
+
+            totalScore += itemScore
+            count += 1
         }
 
         if count == 0 {
             return gaps.isEmpty ? 1.0 : 0.0
         }
 
-        return totalScore / Double(count)
+        // 평균을 0~1 범위로 확실히 제한
+        return min(1.0, max(0.0, totalScore / Double(count)))
     }
 
     /// Gap 우선순위 정렬

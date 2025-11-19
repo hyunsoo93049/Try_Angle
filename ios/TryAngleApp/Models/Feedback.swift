@@ -96,7 +96,7 @@ enum FeedbackCategory: String, Codable, CaseIterable {
         }
 
         // 프레이밍 관련 (거리/줌/비율/여백)
-        if categoryString == "distance" || categoryString == "aspect_ratio" || categoryString == "padding" {
+        if categoryString == "distance" || categoryString == "aspect_ratio" || categoryString == "padding" || categoryString == "framing" || categoryString == "aspect_ratio_mismatch" {
             return .framing
         }
 
@@ -157,7 +157,8 @@ struct FeedbackItem: Codable, Identifiable, Equatable {
     let tolerance: Double?         // 허용 오차 (예: ±3도)
     let unit: String?              // 단위 (예: "도", "걸음")
 
-    var id: String { category + message }
+    // 🔥 ID를 category만으로 하면 같은 카테고리는 숫자만 업데이트됨
+    var id: String { category }
 
     // 진행률 계산 (0.0 ~ 1.0)
     var progress: Double {

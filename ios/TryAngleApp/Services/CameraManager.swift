@@ -11,6 +11,7 @@ class CameraManager: NSObject, ObservableObject {
     @Published var currentFPS: Double = 0.0
     @Published var currentZoom: CGFloat = 1.0
     @Published var aspectRatio: CameraAspectRatio = .ratio4_3  // 🆕 카메라 비율
+    @Published var isFrontCamera: Bool = false  // 🆕 전면 카메라 여부
 
     // MARK: - Camera Properties
     private let session = AVCaptureSession()
@@ -74,6 +75,7 @@ class CameraManager: NSObject, ObservableObject {
         }
 
         currentCamera = camera
+        isFrontCamera = false  // 후면 카메라로 시작
 
         do {
             // 입력 추가
@@ -210,6 +212,7 @@ class CameraManager: NSObject, ObservableObject {
                 session.addInput(newInput)
                 currentInput = newInput
                 currentCamera = newCamera
+                isFrontCamera = (newPosition == .front)  // 카메라 위치 업데이트
             }
         } catch {
             print("❌ Failed to switch camera: \(error)")

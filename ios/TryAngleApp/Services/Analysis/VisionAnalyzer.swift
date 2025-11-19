@@ -16,7 +16,19 @@ struct FaceAnalysisResult {
 // MARK: - 포즈 분석 결과
 struct PoseAnalysisResult {
     let keypoints: [(point: CGPoint, confidence: Float)]  // 17개 키포인트
-    let observation: VNHumanBodyPoseObservation           // 원본 관찰 결과
+    let observation: VNHumanBodyPoseObservation?          // 원본 관찰 결과 (Vision일 때만)
+
+    // Vision용 initializer
+    init(observation: VNHumanBodyPoseObservation, keypoints: [(point: CGPoint, confidence: Float)]) {
+        self.observation = observation
+        self.keypoints = keypoints
+    }
+
+    // YOLO/MoveNet용 initializer (observation 없음)
+    init(keypoints: [(point: CGPoint, confidence: Float)]) {
+        self.observation = nil
+        self.keypoints = keypoints
+    }
 }
 
 // MARK: - Vision 분석기
@@ -83,8 +95,8 @@ class VisionAnalyzer {
         let keypoints = extractKeypoints(from: observation)
 
         return PoseAnalysisResult(
-            keypoints: keypoints,
-            observation: observation
+            observation: observation,
+            keypoints: keypoints
         )
     }
 
@@ -123,8 +135,8 @@ class VisionAnalyzer {
         if let poseObservation = poseDetectionRequest.results?.first {
             let keypoints = extractKeypoints(from: poseObservation)
             poseResult = PoseAnalysisResult(
-                keypoints: keypoints,
-                observation: poseObservation
+                observation: poseObservation,
+                keypoints: keypoints
             )
         }
 

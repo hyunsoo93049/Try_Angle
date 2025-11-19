@@ -14,7 +14,7 @@ struct FeedbackOverlay: View {
                     Spacer()
                     HStack {
                         CategoryChecklistView(categoryStatuses: categoryStatuses)
-                            .padding(.leading, 16)
+                            .padding(.leading, 12)
                         Spacer()
                     }
                     Spacer()
@@ -260,17 +260,16 @@ struct CategoryChecklistView: View {
     let categoryStatuses: [CategoryStatus]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
             ForEach(categoryStatuses) { status in
                 CategoryCheckItem(status: status)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.black.opacity(0.75))
-                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.black.opacity(0.6))
         )
     }
 }
@@ -280,51 +279,17 @@ struct CategoryCheckItem: View {
     let status: CategoryStatus
 
     var body: some View {
-        HStack(spacing: 12) {
-            // 체크 아이콘
-            Image(systemName: status.isSatisfied ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundColor(status.isSatisfied ? .green : .white.opacity(0.5))
-                .frame(width: 24, height: 24)
-                .animation(.easeInOut(duration: 0.3), value: status.isSatisfied)
-
-            // 카테고리 아이콘
-            Text(status.category.icon)
-                .font(.body)
-
+        HStack(spacing: 6) {
             // 카테고리 이름
             Text(status.category.displayName)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundColor(status.isSatisfied ? .white.opacity(0.7) : .white)
 
-            Spacer()
-
-            // 우선순위 배지 (불만족 상태일 때만)
-            if !status.isSatisfied {
-                Text("\(status.priority)")
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .frame(width: 20, height: 20)
-                    .background(
-                        Circle()
-                            .fill(priorityColor(status.priority))
-                    )
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    // 우선순위별 색상
-    private func priorityColor(_ priority: Int) -> Color {
-        switch priority {
-        case 1: return .red          // 포즈
-        case 2: return .orange       // 위치
-        case 3: return .yellow       // 프레이밍
-        case 4: return .blue         // 앵글
-        case 5: return .purple       // 구도
-        case 6: return .cyan         // 시선
-        default: return .gray
+            // 체크 아이콘 (글자 바로 옆)
+            Image(systemName: status.isSatisfied ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 14))
+                .foregroundColor(status.isSatisfied ? .green : .white.opacity(0.5))
+                .animation(.easeInOut(duration: 0.3), value: status.isSatisfied)
         }
     }
 }

@@ -47,7 +47,8 @@ class RealtimeAnalyzer: ObservableObject {
     @Published var categoryStatuses: [CategoryStatus] = []  // 🆕 카테고리별 상태
     @Published var completedFeedbacks: [CompletedFeedback] = []  // 🆕 완료된 피드백들
 
-    private var referenceAnalysis: FrameAnalysis?
+    // 🐛 ContentView에서 접근 가능하도록 internal로 변경
+    var referenceAnalysis: FrameAnalysis?
     private var lastAnalysisTime = Date()
     private let analysisInterval: TimeInterval = 0.1  // 100ms마다 분석
 
@@ -76,8 +77,13 @@ class RealtimeAnalyzer: ObservableObject {
         "pose_missing_parts"
     ]
 
-    // 🆕 V1 분석기들
-    private let visionAnalyzer = VisionAnalyzer()
+    // 🆕 V1 분석기들 (YOLO + MoveNet으로 업그레이드)
+    private lazy var poseMLAnalyzer: PoseMLAnalyzer = {
+        print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 초기화 시작")
+        let analyzer = PoseMLAnalyzer()
+        print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 초기화 완료")
+        return analyzer
+    }()
     private let compositionAnalyzer = CompositionAnalyzer()
     private let cameraAngleDetector = CameraAngleDetector()
     private let gazeTracker = GazeTracker()
@@ -99,16 +105,24 @@ class RealtimeAnalyzer: ObservableObject {
         return request
     }()
 
+    init() {
+        print("🎬🎬🎬 RealtimeAnalyzer init() 호출됨 🎬🎬🎬")
+    }
+
     // MARK: - Helper Methods
 
     /// 여백 계산
     private func calculatePadding(bodyRect: CGRect?, imageSize: CGSize) -> ImagePadding? {
         guard let body = bodyRect else { return nil }
 
-        let top = body.minY
-        let bottom = 1.0 - body.maxY
-        let left = body.minX
-        let right = 1.0 - body.maxX
+        // 🔥 Vision 좌표계: Y=0(화면 하단), Y=1(화면 상단)
+        // body.minY = 인물의 아래쪽 경계 (Y 작은 값)
+        // body.maxY = 인물의 위쪽 경계 (Y 큰 값)
+
+        let top = 1.0 - body.maxY  // 화면 상단 여백 (인물 위 공간)
+        let bottom = body.minY     // 화면 하단 여백 (인물 아래 공간)
+        let left = body.minX       // 좌측 여백
+        let right = 1.0 - body.maxX  // 우측 여백
 
         return ImagePadding(
             top: top,
@@ -120,10 +134,34 @@ class RealtimeAnalyzer: ObservableObject {
 
     // MARK: - 레퍼런스 이미지 분석
     func analyzeReference(_ image: UIImage) {
-        guard let cgImage = image.cgImage else { return }
+        print("========================================")
+        print("🎯🎯🎯 레퍼런스 이미지 분석 시작 🎯🎯🎯")
+        print("========================================")
 
-        // 🆕 VisionAnalyzer로 얼굴+포즈 동시 분석
-        let (faceResult, poseResult) = visionAnalyzer.analyzeFaceAndPose(from: image)
+        guard let cgImage = image.cgImage else {
+            print("❌ cgImage 없음")
+            return
+        }
+
+        print("🎯 레퍼런스 이미지 크기: \(cgImage.width) x \(cgImage.height)")
+        print("🎯 레퍼런스 이미지 orientation: \(image.imageOrientation.rawValue)")
+
+        // 🆕 PoseMLAnalyzer로 얼굴+포즈 동시 분석 (YOLO + MoveNet)
+        print("🎯 PoseMLAnalyzer.analyzeFaceAndPose() 호출 중...")
+        let (faceResult, poseResult) = poseMLAnalyzer.analyzeFaceAndPose(from: image)
+        print("🎯 분석 완료:")
+        print("   - 얼굴: \(faceResult != nil ? "✅ 검출됨" : "❌ 검출 안됨")")
+        print("   - 포즈: \(poseResult != nil ? "✅ 검출됨 (\(poseResult!.keypoints.count)개 키포인트)" : "❌ 검출 안됨")")
+
+        if let pose = poseResult {
+            let visibleCount = pose.keypoints.filter { $0.confidence >= 0.5 }.count
+            print("   - 포즈 신뢰도 ≥ 0.5: \(visibleCount)/\(pose.keypoints.count)개")
+        }
+
+        // 🔥 디버그: 포즈 검출 실패 시 이미지 저장
+        if poseResult == nil {
+            saveDebugImage(image, reason: "pose_detection_failed")
+        }
 
         let faceRect = faceResult?.faceRect
         let faceYaw = faceResult?.yaw
@@ -131,13 +169,13 @@ class RealtimeAnalyzer: ObservableObject {
         let poseKeypoints = poseResult?.keypoints
 
         // 밝기 계산
-        let brightness = visionAnalyzer.calculateBrightness(from: cgImage)
+        let brightness = poseMLAnalyzer.calculateBrightness(from: cgImage)
 
         // 🆕 더치 틸트 감지
         let tiltAngle = cameraAngleDetector.detectDutchTilt(faceObservation: faceResult?.observation) ?? 0.0
 
         // 전신 영역 추정
-        let bodyRect = visionAnalyzer.estimateBodyRect(from: faceRect)
+        let bodyRect = poseMLAnalyzer.estimateBodyRect(from: faceRect)
 
         // 카메라 앵글 감지
         let cameraAngle = cameraAngleDetector.detectCameraAngle(
@@ -193,21 +231,37 @@ class RealtimeAnalyzer: ObservableObject {
             imagePadding: padding
         )
 
-        print("📸 레퍼런스 분석 완료:")
+        print("========================================")
+        print("📸 레퍼런스 분석 최종 결과:")
+        print("========================================")
         print("   - 비율: \(aspectRatio.displayName)")
-        print("   - 얼굴: \(faceRect != nil ? "감지됨" : "없음")")
+        print("   - 얼굴: \(faceRect != nil ? "✅ 감지됨" : "❌ 없음")")
         print("   - 얼굴 각도: yaw=\(faceYaw ?? 0), pitch=\(facePitch ?? 0)")
         print("   - 카메라 앵글: \(cameraAngle.description)")
         print("   - 구도: \(compositionType?.description ?? "알 수 없음")")
         print("   - 시선: \(gaze?.direction.description ?? "알 수 없음")")
         print("   - 거리: \(depth?.distance.map { String(format: "%.2fm", $0) } ?? "알 수 없음")")
-        print("   - 포즈 키포인트: \(poseKeypoints?.count ?? 0)개")
+
+        if let keypoints = poseKeypoints {
+            let visibleCount = keypoints.filter { $0.confidence >= 0.5 }.count
+            print("   - 포즈 키포인트: \(keypoints.count)개 (신뢰도 ≥ 0.5: \(visibleCount)개)")
+            if visibleCount >= 5 {
+                print("   - ✅ 포즈 검출 성공! UI에 표시될 것임")
+            } else {
+                print("   - ⚠️ 포즈 신뢰도 낮음 - 포즈 비교 불가능")
+            }
+        } else {
+            print("   - ❌ 포즈 키포인트: 없음")
+            print("   - ⚠️ YOLO/MoveNet 둘 다 검출 실패")
+        }
+
         print("   - 밝기: \(brightness)")
         print("   - 기울기: \(tiltAngle)도")
+        print("========================================")
     }
 
     // MARK: - 실시간 프레임 분석
-    func analyzeFrame(_ image: UIImage) {
+    func analyzeFrame(_ image: UIImage, isFrontCamera: Bool = false) {
         // 너무 자주 분석하지 않도록 제한
         guard Date().timeIntervalSince(lastAnalysisTime) >= analysisInterval else { return }
 
@@ -224,8 +278,8 @@ class RealtimeAnalyzer: ObservableObject {
         guard let cgImage = image.cgImage else { return }
         lastAnalysisTime = Date()
 
-        // 🆕 VisionAnalyzer로 분석
-        let (faceResult, poseResult) = visionAnalyzer.analyzeFaceAndPose(from: image)
+        // 🆕 PoseMLAnalyzer로 분석 (YOLO + MoveNet)
+        let (faceResult, poseResult) = poseMLAnalyzer.analyzeFaceAndPose(from: image)
 
         // 얼굴이 감지되지 않으면 완성도 0으로 설정
         guard faceResult != nil else {
@@ -247,11 +301,11 @@ class RealtimeAnalyzer: ObservableObject {
         }
 
         // 밝기 및 기울기
-        let brightness = visionAnalyzer.calculateBrightness(from: cgImage)
+        let brightness = poseMLAnalyzer.calculateBrightness(from: cgImage)
         let tilt = cameraAngleDetector.detectDutchTilt(faceObservation: faceResult?.observation) ?? 0.0
 
         // 전신 영역
-        let bodyRect = visionAnalyzer.estimateBodyRect(from: faceResult?.faceRect)
+        let bodyRect = poseMLAnalyzer.estimateBodyRect(from: faceResult?.faceRect)
 
         // 카메라 앵글
         let cameraAngle = cameraAngleDetector.detectCameraAngle(
@@ -362,7 +416,8 @@ class RealtimeAnalyzer: ObservableObject {
                 compositionType: compositionType,
                 gaze: gaze,
                 depth: depth
-            )
+            ),
+            isFrontCamera: isFrontCamera  // 🆕 전면 카메라 여부 전달
         )
 
         // 프레이밍 피드백이 있으면 최우선으로 추가
@@ -533,4 +588,19 @@ class RealtimeAnalyzer: ObservableObject {
     // - estimateCameraAngle() → CameraAngleDetector 사용
     // - comparePoseKeypoints() → AdaptivePoseComparator 사용
     // - calculateAngle() → AdaptivePoseComparator 내부 사용
+
+    // MARK: - 디버그 헬퍼
+    private func saveDebugImage(_ image: UIImage, reason: String) {
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return }
+
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            .replacingOccurrences(of: ":", with: "-")
+        let filename = "debug_\(reason)_\(timestamp).jpg"
+
+        if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsPath.appendingPathComponent(filename)
+            try? data.write(to: fileURL)
+            print("🔍 디버그 이미지 저장: \(fileURL.path)")
+        }
+    }
 }
