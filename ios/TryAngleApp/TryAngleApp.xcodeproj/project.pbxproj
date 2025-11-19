@@ -17,6 +17,8 @@
 		6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B77A2ECD559F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B7D02ECD595F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CE40FEB2ECD68E0003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CE410442ECD72FA003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB453F2EC9E4BF00809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB46312ECC964900809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
@@ -89,6 +91,16 @@
 			sourceTree = "<group>";
 		};
 		6CD9B7D32ECD595F00CC618D /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CE40FEE2ECD68E0003DE68C /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CE410482ECD72FA003DE68C /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -181,16 +193,8 @@
 					ProjectRef = 6CEB46312ECC964900809755 /* TryAngleApp.xcodeproj */;
 				},
 				{
-					ProductGroup = 6CEB45F52ECC7B8900809755 /* Products */;
-					ProjectRef = 6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */;
-				},
-				{
 					ProductGroup = 6CD9B77C2ECD559F00CC618D /* Products */;
 					ProjectRef = 6CD9B77A2ECD559F00CC618D /* TryAngleApp.xcodeproj */;
-				},
-				{
-					ProductGroup = 6CD9B7222ECCB1AF00CC618D /* Products */;
-					ProjectRef = 6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */;
 				},
 				{
 					ProductGroup = 6CD9B7D32ECD595F00CC618D /* Products */;
@@ -199,6 +203,22 @@
 				{
 					ProductGroup = 6C726E772EC9CDB000DDA131 /* Products */;
 					ProjectRef = 6C726E762EC9CDB000DDA131 /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CE410482ECD72FA003DE68C /* Products */;
+					ProjectRef = 6CE410442ECD72FA003DE68C /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CEB45F52ECC7B8900809755 /* Products */;
+					ProjectRef = 6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CD9B7222ECCB1AF00CC618D /* Products */;
+					ProjectRef = 6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CE40FEE2ECD68E0003DE68C /* Products */;
+					ProjectRef = 6CE40FEB2ECD68E0003DE68C /* TryAngleApp.xcodeproj */;
 				},
 				{
 					ProductGroup = 6CEB45402EC9E4BF00809755 /* Products */;
@@ -284,7 +304,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -348,7 +368,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -405,10 +425,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				NEW_SETTING = "";
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-lc++",
-				);
+				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.tryangle.TryAngleApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -448,10 +465,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				NEW_SETTING = "";
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-lc++",
-				);
+				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.tryangle.TryAngleApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

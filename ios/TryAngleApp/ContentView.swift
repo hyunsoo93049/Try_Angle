@@ -61,11 +61,24 @@ struct ContentView: View {
             showCaptureFlash = true
         }
 
-        // 1️⃣ 먼저 픽셀 데이터를 실제로 회전 (orientation .right → 실제 세로 픽셀)
-        let rotatedImage = currentFrame.fixedOrientation()
+        let fixedImage: UIImage
 
-        // 2️⃣ 회전된 이미지를 선택한 비율로 크롭 (이제 픽셀이 세로이므로 올바르게 자름)
-        let croppedImage = cropImage(rotatedImage, to: selectedAspectRatio)
+        // 픽셀 비율 확인하여 landscape/portrait 처리
+        guard let cgImage = currentFrame.cgImage else { return }
+        let actualWidth = cgImage.width
+        let actualHeight = cgImage.height
+
+        if actualWidth > actualHeight {
+            // 픽셀이 가로 방향 (landscape)이면 회전하지 않고 orientation만 .up으로 설정
+            // 이렇게 해야 사진 앱에서 가로 사진으로 올바르게 표시됨
+            fixedImage = UIImage(cgImage: cgImage, scale: currentFrame.scale, orientation: .up)
+        } else {
+            // 픽셀이 세로 방향 (portrait)이면 fixedOrientation() 적용
+            fixedImage = currentFrame.fixedOrientation()
+        }
+
+        // 회전된 이미지를 크롭
+        let croppedImage = cropImage(fixedImage, to: selectedAspectRatio)
 
         // 이미지 저장
         capturedImage = croppedImage

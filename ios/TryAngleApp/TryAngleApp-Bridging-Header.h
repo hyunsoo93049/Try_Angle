@@ -8,8 +8,7 @@
 #ifndef TryAngleApp_Bridging_Header_h
 #define TryAngleApp_Bridging_Header_h
 
-// ONNX Runtime C API
-#import "onnxruntime_c_api.h"
-#import "coreml_provider_factory.h"
+// ONNX Runtime Objective-C API (Full version)
+#import <onnxruntime_objc/onnxruntime.h>
 
 #endif /* TryAngleApp_Bridging_Header_h */

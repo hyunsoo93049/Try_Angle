@@ -98,6 +98,8 @@ class CameraManager: NSObject, ObservableObject {
             // 비디오 방향 설정
             if let connection = videoOutput.connection(with: .video) {
                 connection.videoOrientation = .portrait
+                // 후면 카메라이므로 미러링 비활성화
+                connection.isVideoMirrored = false
             }
 
         } catch {
@@ -213,6 +215,16 @@ class CameraManager: NSObject, ObservableObject {
                 currentInput = newInput
                 currentCamera = newCamera
                 isFrontCamera = (newPosition == .front)  // 카메라 위치 업데이트
+
+                // 전면/후면 카메라에 따라 미러링 설정
+                if let connection = videoOutput.connection(with: .video) {
+                    // 전면 카메라: 미러링 활성화 (거울처럼)
+                    // 후면 카메라: 미러링 비활성화
+                    connection.isVideoMirrored = (newPosition == .front)
+
+                    // 전면/후면 모두 portrait 방향 사용
+                    connection.videoOrientation = .portrait
+                }
             }
         } catch {
             print("❌ Failed to switch camera: \(error)")
@@ -325,10 +337,41 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
 
-        // 올바른 방향으로 이미지 생성 (portrait 모드에서는 right로 회전)
-        // ⚠️ 실시간 분석을 위해 orientation을 .right로 유지 (Vision이 자동으로 좌표 변환)
-        // fixedOrientation()을 호출하면 orientation이 .up이 되어 Vision 좌표 변환 안 됨
-        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+        // 디바이스 방향에 따라 적절한 orientation 설정
+        let deviceOrientation = UIDevice.current.orientation
+        var imageOrientation: UIImage.Orientation = .right  // 기본값 (세로)
+
+        // 후면 카메라 기준으로 orientation 매핑
+        if currentCamera?.position == .back {
+            switch deviceOrientation {
+            case .portrait:
+                imageOrientation = .up
+            case .portraitUpsideDown:
+                imageOrientation = .down
+            case .landscapeLeft:
+                imageOrientation = .right  // landscapeRight와 같은 값 사용
+            case .landscapeRight:
+                imageOrientation = .right
+            default:
+                imageOrientation = .up
+            }
+        } else {
+            // 전면 카메라: 화면에 보이는 그대로 저장 (회전 없음)
+            switch deviceOrientation {
+            case .portrait:
+                imageOrientation = .up  // 회전 없음
+            case .portraitUpsideDown:
+                imageOrientation = .down
+            case .landscapeLeft:
+                imageOrientation = .up
+            case .landscapeRight:
+                imageOrientation = .up
+            default:
+                imageOrientation = .up
+            }
+        }
+
+        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: imageOrientation)
 
         // FPS 계산
         fpsFrameCount += 1
