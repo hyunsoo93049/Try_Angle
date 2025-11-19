@@ -252,7 +252,7 @@ class RealtimeAnalyzer: ObservableObject {
             }
         } else {
             print("   - ❌ 포즈 키포인트: 없음")
-            print("   - ⚠️ YOLO/MoveNet 둘 다 검출 실패")
+            print("   - ⚠️ RTMPose 포즈 검출 실패")
         }
 
         print("   - 밝기: \(brightness)")

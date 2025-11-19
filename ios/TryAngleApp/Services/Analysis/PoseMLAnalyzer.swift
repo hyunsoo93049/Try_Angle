@@ -6,7 +6,7 @@ import UIKit
 class PoseMLAnalyzer {
 
     // RTMPose Runner (ONNX Runtime)
-    private let rtmPoseRunner = RTMPoseRunner()
+    private let rtmPoseRunner: RTMPoseRunner?
 
     // Vision은 얼굴 감지용으로 계속 사용
     private lazy var faceDetectionRequest: VNDetectFaceLandmarksRequest = {
@@ -25,9 +25,22 @@ class PoseMLAnalyzer {
 
     init() {
         print("🚀 PoseMLAnalyzer init() 시작")
+
+        // RTMPose Runner 초기화 시도 (stored property 먼저 초기화)
+        rtmPoseRunner = RTMPoseRunner()
+
+        // 초기화 완료 후 로그
         logToFile("🚀 PoseMLAnalyzer init() 시작 - \(Date())")
-        print("🚀 PoseMLAnalyzer init() 완료 (RTMPose via ONNX Runtime)")
-        logToFile("✅ RTMPose 사용 (ONNX Runtime with CoreML EP)")
+
+        if rtmPoseRunner != nil {
+            print("✅ RTMPose Runner 초기화 성공")
+            logToFile("✅ RTMPose 사용 (ONNX Runtime with CoreML EP)")
+        } else {
+            print("❌ RTMPose Runner 초기화 실패 - ONNX 모델을 찾을 수 없음")
+            logToFile("❌ RTMPose 초기화 실패")
+        }
+
+        print("🚀 PoseMLAnalyzer init() 완료")
     }
 
     // 🐛 파일에 로그 기록
@@ -104,7 +117,11 @@ class PoseMLAnalyzer {
 
     // MARK: - RTMPose 포즈 감지
     private func detectPoseWithRTMPose(from image: UIImage) -> PoseAnalysisResult? {
-        guard let rtmResult = rtmPoseRunner.detectPose(from: image) else {
+        guard let runner = rtmPoseRunner else {
+            return nil
+        }
+
+        guard let rtmResult = runner.detectPose(from: image) else {
             return nil
         }
 
