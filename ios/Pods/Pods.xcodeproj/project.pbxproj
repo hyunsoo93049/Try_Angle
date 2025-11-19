@@ -7,16 +7,6 @@
 	objects = {
 
 /* Begin PBXAggregateTarget section */
-		AC559E53E13B6FBEF4F5CC310A73AFE6 /* TensorFlowLiteC */ = {
-			isa = PBXAggregateTarget;
-			buildConfigurationList = 636D81D05741D892734E9C70745D0DB7 /* Build configuration list for PBXAggregateTarget "TensorFlowLiteC" */;
-			buildPhases = (
-				E428E9B2EB9A04CAA5BA04B652A1082B /* [CP] Copy XCFrameworks */,
-			);
-			dependencies = (
-			);
-			name = TensorFlowLiteC;
-		};
 		DDF6BCCB08B331B5F6F8EC5AE626B7DF /* onnxruntime-mobile-c */ = {
 			isa = PBXAggregateTarget;
 			buildConfigurationList = 7773D550288A6955C562894B93AAC39D /* Build configuration list for PBXAggregateTarget "onnxruntime-mobile-c" */;
@@ -30,130 +20,59 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
-		074EA1CE804AE6F842EA5FE9473A9D2A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
-		08E1C0857669109A87E2303DDFEAC5D9 /* QuantizationParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F3E6119C6D60ABACDD14A2BC153872 /* QuantizationParameters.swift */; };
-		3B7847A2675B0ADA72EECDC5E7FECD37 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
-		3EC459D0C3A518BCA5C7396CC6BC0CFA /* TensorFlowLiteSwift-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = A6044EDE7FE04E33AB0EDACF95391EEE /* TensorFlowLiteSwift-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		4249272F70FB8DD93EE531EF97C64CA6 /* InterpreterError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06DEF09E1A9B613F232CC04F9DD488E0 /* InterpreterError.swift */; };
-		55229A3614144E889EE7669B11506DCA /* TensorFlowLiteSwift-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 100DAD856AC11F5583ED7EFC550BAC51 /* TensorFlowLiteSwift-dummy.m */; };
-		66BBE8F56BA0938D4D868B4B79585928 /* SignatureRunnerError.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FF22E25925AEC444DAB85CF3F34D80 /* SignatureRunnerError.swift */; };
-		69D82A954913318190C41129DD34E897 /* Pods-TryAngleApp-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = F89180ACD03206FC6F986EDFB1901869 /* Pods-TryAngleApp-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		6DCD998CA7F76F86662F2FA434770458 /* SignatureRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728671C15AAA6A44C1504FB95F312E6C /* SignatureRunner.swift */; };
-		6FF1D029C99A94F56122EB126BE8047A /* Tensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F145D231BCFDFB0FD0687F85C4A860 /* Tensor.swift */; };
-		94178AE1F69757DDBF5B812982044746 /* Delegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7743F96909392E10BE9F53D501B07906 /* Delegate.swift */; };
-		A0A4402F987271FBA80C438ACC0C5CC7 /* TensorFlowLite.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8AB532A30751BE77B9350D238413270 /* TensorFlowLite.swift */; };
-		C1DCDAC7861C1751E38DB93F42A0830D /* Pods-TryAngleApp-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = D9FD0D137D1FB320ADEFB22B74701BE1 /* Pods-TryAngleApp-dummy.m */; };
-		EA9F80BE4681AD4751C94135B4FDD6E1 /* Interpreter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671D95A79F19F6117C4D11FA1C3F8261 /* Interpreter.swift */; };
-		FB7B5329D39CC467BF41D2DCC5FC544D /* Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968FD1A31218EB1C96363E79B86B3395 /* Model.swift */; };
+		1034C3A1A39F7AF8EDC56185F6F2C20C /* Pods-TryAngleApp-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = F89180ACD03206FC6F986EDFB1901869 /* Pods-TryAngleApp-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		86724E3A5B45DB3EDD59665804214B84 /* Pods-TryAngleApp-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = D9FD0D137D1FB320ADEFB22B74701BE1 /* Pods-TryAngleApp-dummy.m */; };
+		E9D0DD55BAE0E13213BB794C85B24FBE /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		214A52BA4E5257AB15281D79DE857548 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AC559E53E13B6FBEF4F5CC310A73AFE6;
-			remoteInfo = TensorFlowLiteC;
-		};
-		D93ECA2F6CD5F67F0F44827211A9186C /* PBXContainerItemProxy */ = {
+		8902C2F03F5AA25A2A18343ADE32696E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = DDF6BCCB08B331B5F6F8EC5AE626B7DF;
 			remoteInfo = "onnxruntime-mobile-c";
 		};
-		E3243E209E5A88D0C092A3CBC2C3BF48 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 10418167F619D6DA72BADAD10F9EC02B;
-			remoteInfo = TensorFlowLiteSwift;
-		};
-		E3F9FFA75511A7161154151F3525E981 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AC559E53E13B6FBEF4F5CC310A73AFE6;
-			remoteInfo = TensorFlowLiteC;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		06DEF09E1A9B613F232CC04F9DD488E0 /* InterpreterError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InterpreterError.swift; path = tensorflow/lite/swift/Sources/InterpreterError.swift; sourceTree = "<group>"; };
-		100DAD856AC11F5583ED7EFC550BAC51 /* TensorFlowLiteSwift-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "TensorFlowLiteSwift-dummy.m"; sourceTree = "<group>"; };
-		124243E8AD033F7B743970936A156A1D /* TensorFlowLiteC.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = TensorFlowLiteC.xcframework; path = Frameworks/TensorFlowLiteC.xcframework; sourceTree = "<group>"; };
-		194AC15FB33512F05DB01403DADCAC28 /* TensorFlowLiteSwift.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = TensorFlowLiteSwift.modulemap; sourceTree = "<group>"; };
-		1FFC81398E80EA25B6E80F4779AEF9EB /* onnxruntime_cxx_api.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_cxx_api.h; path = Headers/onnxruntime_cxx_api.h; sourceTree = "<group>"; };
-		2035BDC0C179FE279B6B106E8FCD38AB /* onnxruntime-mobile-c.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "onnxruntime-mobile-c.debug.xcconfig"; sourceTree = "<group>"; };
-		2612E599A39BF4E8196A5341B4547214 /* onnxruntime_run_options_config_keys.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_run_options_config_keys.h; path = Headers/onnxruntime_run_options_config_keys.h; sourceTree = "<group>"; };
-		29E35AAF26A45A80C768183BA863DC59 /* TensorFlowLiteC-xcframeworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "TensorFlowLiteC-xcframeworks.sh"; sourceTree = "<group>"; };
-		2F9037AD50A90BED17BE552BCCEC396A /* TensorFlowLiteC.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = TensorFlowLiteC.release.xcconfig; sourceTree = "<group>"; };
-		31E3555E847C3A9E1A8BD91563D5D241 /* onnxruntime-mobile-c-xcframeworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "onnxruntime-mobile-c-xcframeworks.sh"; sourceTree = "<group>"; };
-		37E2E2DE199D1BF096FF7284B8AE8BFC /* TensorFlowLiteC.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = TensorFlowLiteC.debug.xcconfig; sourceTree = "<group>"; };
+		039D095C0D85CA5C06545B61E0E2D186 /* onnxruntime_cxx_inline.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_cxx_inline.h; path = Headers/onnxruntime_cxx_inline.h; sourceTree = "<group>"; };
+		2AF25F099B7E1100D80B10A9DF791616 /* onnxruntime.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = onnxruntime.xcframework; sourceTree = "<group>"; };
+		2CF785892C4C9F305632D7019D80CA87 /* onnxruntime-mobile-c.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "onnxruntime-mobile-c.debug.xcconfig"; sourceTree = "<group>"; };
 		384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		4CAA1D662196B58183313B2F62EF0086 /* onnxruntime.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = onnxruntime.xcframework; sourceTree = "<group>"; };
-		55211A942EDDA8AE88B10817DB850A60 /* cpu_provider_factory.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = cpu_provider_factory.h; path = Headers/cpu_provider_factory.h; sourceTree = "<group>"; };
-		56A3C1F968B8D5E067BB364490140D12 /* onnxruntime-mobile-c.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "onnxruntime-mobile-c.release.xcconfig"; sourceTree = "<group>"; };
+		459302BB8F3FB6DE6B5BE7321DF722EC /* cpu_provider_factory.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = cpu_provider_factory.h; path = Headers/cpu_provider_factory.h; sourceTree = "<group>"; };
+		5BA94D2DE390EBDE267C5A79A43353DA /* onnxruntime_float16.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_float16.h; path = Headers/onnxruntime_float16.h; sourceTree = "<group>"; };
 		5F48D77E10D5B30766F61E1DA3FAA0AC /* Pods-TryAngleApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-TryAngleApp.debug.xcconfig"; sourceTree = "<group>"; };
-		671D95A79F19F6117C4D11FA1C3F8261 /* Interpreter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Interpreter.swift; path = tensorflow/lite/swift/Sources/Interpreter.swift; sourceTree = "<group>"; };
 		6759305BB2A579B41664A92A76F61806 /* Pods-TryAngleApp-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-TryAngleApp-Info.plist"; sourceTree = "<group>"; };
 		67A3E1A5DE0AA87C83AD712957C36322 /* Pods-TryAngleApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-TryAngleApp.release.xcconfig"; sourceTree = "<group>"; };
-		728671C15AAA6A44C1504FB95F312E6C /* SignatureRunner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SignatureRunner.swift; path = tensorflow/lite/swift/Sources/SignatureRunner.swift; sourceTree = "<group>"; };
-		7743F96909392E10BE9F53D501B07906 /* Delegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Delegate.swift; path = tensorflow/lite/swift/Sources/Delegate.swift; sourceTree = "<group>"; };
-		968FD1A31218EB1C96363E79B86B3395 /* Model.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Model.swift; path = tensorflow/lite/swift/Sources/Model.swift; sourceTree = "<group>"; };
-		99AC74701713774F588570CEFA812A6D /* TensorFlowLiteSwift-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "TensorFlowLiteSwift-Info.plist"; sourceTree = "<group>"; };
-		99F3E6119C6D60ABACDD14A2BC153872 /* QuantizationParameters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = QuantizationParameters.swift; path = tensorflow/lite/swift/Sources/QuantizationParameters.swift; sourceTree = "<group>"; };
+		8CCD8D6D475303B5328A9D22C6C03F83 /* onnxruntime_cxx_api.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_cxx_api.h; path = Headers/onnxruntime_cxx_api.h; sourceTree = "<group>"; };
+		98A39C28B5D62A6F6E709DE9B9472F15 /* coreml_provider_factory.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = coreml_provider_factory.h; path = Headers/coreml_provider_factory.h; sourceTree = "<group>"; };
+		99D38908DAF0E77F98E067694199C241 /* onnxruntime_run_options_config_keys.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_run_options_config_keys.h; path = Headers/onnxruntime_run_options_config_keys.h; sourceTree = "<group>"; };
 		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
-		A45031037654A6228FA7FE0EB66A9A54 /* onnxruntime_cxx_inline.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_cxx_inline.h; path = Headers/onnxruntime_cxx_inline.h; sourceTree = "<group>"; };
-		A6044EDE7FE04E33AB0EDACF95391EEE /* TensorFlowLiteSwift-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "TensorFlowLiteSwift-umbrella.h"; sourceTree = "<group>"; };
 		B1C01C41C19653AAE004952AB8DB2D88 /* Pods-TryAngleApp.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-TryAngleApp.modulemap"; sourceTree = "<group>"; };
-		B4C331A0BF2904D1B6B5899AB70C26EC /* coreml_provider_factory.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = coreml_provider_factory.h; path = Headers/coreml_provider_factory.h; sourceTree = "<group>"; };
-		B7AC14A5005241DD83CE71D5AC0EDD9E /* onnxruntime_c_api.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_c_api.h; path = Headers/onnxruntime_c_api.h; sourceTree = "<group>"; };
-		B7FF22E25925AEC444DAB85CF3F34D80 /* SignatureRunnerError.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SignatureRunnerError.swift; path = tensorflow/lite/swift/Sources/SignatureRunnerError.swift; sourceTree = "<group>"; };
-		C0CE9C20DFEB15DB2CA2DE6920CD9584 /* TensorFlowLiteSwift.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = TensorFlowLiteSwift.release.xcconfig; sourceTree = "<group>"; };
 		C43DA28B26D056F076C43A8D518AB01C /* Pods-TryAngleApp-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-TryAngleApp-acknowledgements.plist"; sourceTree = "<group>"; };
+		CDA3275DA8CC4E0BC15290AD4B18875B /* onnxruntime-mobile-c-xcframeworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "onnxruntime-mobile-c-xcframeworks.sh"; sourceTree = "<group>"; };
+		D40217A399DD161D66B634EFFF9C3FFF /* onnxruntime-mobile-c.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "onnxruntime-mobile-c.release.xcconfig"; sourceTree = "<group>"; };
 		D9FD0D137D1FB320ADEFB22B74701BE1 /* Pods-TryAngleApp-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-TryAngleApp-dummy.m"; sourceTree = "<group>"; };
-		E0B71FE13AA6B05010059EB4B8D87919 /* TensorFlowLiteSwift */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = TensorFlowLiteSwift; path = TensorFlowLite.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		E7C1F46D909CA039ACC46241FDC27118 /* onnxruntime_float16.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_float16.h; path = Headers/onnxruntime_float16.h; sourceTree = "<group>"; };
-		E8AB532A30751BE77B9350D238413270 /* TensorFlowLite.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TensorFlowLite.swift; path = tensorflow/lite/swift/Sources/TensorFlowLite.swift; sourceTree = "<group>"; };
 		E92BD81CB82E8AE22B29AE1E0E93F1C7 /* Pods-TryAngleApp */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = "Pods-TryAngleApp"; path = Pods_TryAngleApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		F13AE8336B04B5A93D8B681761254959 /* TensorFlowLiteSwift-prefix.pch */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "TensorFlowLiteSwift-prefix.pch"; sourceTree = "<group>"; };
-		F3F145D231BCFDFB0FD0687F85C4A860 /* Tensor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Tensor.swift; path = tensorflow/lite/swift/Sources/Tensor.swift; sourceTree = "<group>"; };
+		F46CE3CA28C84A05FEAF94FFBFF9FD96 /* onnxruntime_c_api.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_c_api.h; path = Headers/onnxruntime_c_api.h; sourceTree = "<group>"; };
 		F6844C63FC9B627663517B7BABA1685B /* Pods-TryAngleApp-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-TryAngleApp-acknowledgements.markdown"; sourceTree = "<group>"; };
 		F89180ACD03206FC6F986EDFB1901869 /* Pods-TryAngleApp-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-TryAngleApp-umbrella.h"; sourceTree = "<group>"; };
-		F9CFB10CBB0F708B100F413BC31A915D /* onnxruntime_session_options_config_keys.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_session_options_config_keys.h; path = Headers/onnxruntime_session_options_config_keys.h; sourceTree = "<group>"; };
-		FCCF120F1E257A7A1FFA6DABA342C7DB /* TensorFlowLiteSwift.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = TensorFlowLiteSwift.debug.xcconfig; sourceTree = "<group>"; };
+		FB2F8B6C74B07BDC1EFE187028FC842F /* onnxruntime_session_options_config_keys.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = onnxruntime_session_options_config_keys.h; path = Headers/onnxruntime_session_options_config_keys.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		658B0AA041F79D1F5DE460CE61C078CC /* Frameworks */ = {
+		54D3C0756D027060F22467D10ECFCCB2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				074EA1CE804AE6F842EA5FE9473A9D2A /* Foundation.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		823B660C7DC1DD7831479D0509076FD1 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				3B7847A2675B0ADA72EECDC5E7FECD37 /* Foundation.framework in Frameworks */,
+				E9D0DD55BAE0E13213BB794C85B24FBE /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		1FE569CB5E78959D2067DADBFF374230 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				E92BD81CB82E8AE22B29AE1E0E93F1C7 /* Pods-TryAngleApp */,
-				E0B71FE13AA6B05010059EB4B8D87919 /* TensorFlowLiteSwift */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 		296F6EF130ADA346FBE858A3FFAED0D2 /* Targets Support Files */ = {
 			isa = PBXGroup;
 			children = (
@@ -162,119 +81,38 @@
 			name = "Targets Support Files";
 			sourceTree = "<group>";
 		};
-		2E19658D43896B3F5BCE53B22FC07329 /* Support Files */ = {
+		530064A6EB29F5C776D7CFFDD6ABE263 /* onnxruntime-mobile-c */ = {
 			isa = PBXGroup;
 			children = (
-				31E3555E847C3A9E1A8BD91563D5D241 /* onnxruntime-mobile-c-xcframeworks.sh */,
-				2035BDC0C179FE279B6B106E8FCD38AB /* onnxruntime-mobile-c.debug.xcconfig */,
-				56A3C1F968B8D5E067BB364490140D12 /* onnxruntime-mobile-c.release.xcconfig */,
-			);
-			name = "Support Files";
-			path = "../Target Support Files/onnxruntime-mobile-c";
-			sourceTree = "<group>";
-		};
-		5AA01B4CA1ECB546B29366A5C5CC2428 /* Support Files */ = {
-			isa = PBXGroup;
-			children = (
-				29E35AAF26A45A80C768183BA863DC59 /* TensorFlowLiteC-xcframeworks.sh */,
-				37E2E2DE199D1BF096FF7284B8AE8BFC /* TensorFlowLiteC.debug.xcconfig */,
-				2F9037AD50A90BED17BE552BCCEC396A /* TensorFlowLiteC.release.xcconfig */,
-			);
-			name = "Support Files";
-			path = "../Target Support Files/TensorFlowLiteC";
-			sourceTree = "<group>";
-		};
-		829ACAF5C19031E12906D2E48286F2A8 /* TensorFlowLiteC */ = {
-			isa = PBXGroup;
-			children = (
-				A1BED8C355FCD166F1F569E0C954E8B6 /* Core */,
-				5AA01B4CA1ECB546B29366A5C5CC2428 /* Support Files */,
-			);
-			name = TensorFlowLiteC;
-			path = TensorFlowLiteC;
-			sourceTree = "<group>";
-		};
-		893E0B53B2996B52DF2D790E4EEDE001 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				124243E8AD033F7B743970936A156A1D /* TensorFlowLiteC.xcframework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		9438E09FE7AA27389B4F07BFC4C977DA /* Core */ = {
-			isa = PBXGroup;
-			children = (
-				7743F96909392E10BE9F53D501B07906 /* Delegate.swift */,
-				671D95A79F19F6117C4D11FA1C3F8261 /* Interpreter.swift */,
-				06DEF09E1A9B613F232CC04F9DD488E0 /* InterpreterError.swift */,
-				968FD1A31218EB1C96363E79B86B3395 /* Model.swift */,
-				99F3E6119C6D60ABACDD14A2BC153872 /* QuantizationParameters.swift */,
-				728671C15AAA6A44C1504FB95F312E6C /* SignatureRunner.swift */,
-				B7FF22E25925AEC444DAB85CF3F34D80 /* SignatureRunnerError.swift */,
-				F3F145D231BCFDFB0FD0687F85C4A860 /* Tensor.swift */,
-				E8AB532A30751BE77B9350D238413270 /* TensorFlowLite.swift */,
-			);
-			name = Core;
-			sourceTree = "<group>";
-		};
-		94475DF0132CC62128A32337236A9A3B /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				C4BC3787971DA01DF6571556584F4022 /* onnxruntime-mobile-c */,
-				829ACAF5C19031E12906D2E48286F2A8 /* TensorFlowLiteC */,
-				F2364750D6D149C186C7943241969D66 /* TensorFlowLiteSwift */,
-			);
-			name = Pods;
-			sourceTree = "<group>";
-		};
-		A1BED8C355FCD166F1F569E0C954E8B6 /* Core */ = {
-			isa = PBXGroup;
-			children = (
-				893E0B53B2996B52DF2D790E4EEDE001 /* Frameworks */,
-			);
-			name = Core;
-			sourceTree = "<group>";
-		};
-		AA38312E76D96F19A03EFB54A58C50C1 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				4CAA1D662196B58183313B2F62EF0086 /* onnxruntime.xcframework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		C4BC3787971DA01DF6571556584F4022 /* onnxruntime-mobile-c */ = {
-			isa = PBXGroup;
-			children = (
-				B4C331A0BF2904D1B6B5899AB70C26EC /* coreml_provider_factory.h */,
-				55211A942EDDA8AE88B10817DB850A60 /* cpu_provider_factory.h */,
-				B7AC14A5005241DD83CE71D5AC0EDD9E /* onnxruntime_c_api.h */,
-				1FFC81398E80EA25B6E80F4779AEF9EB /* onnxruntime_cxx_api.h */,
-				A45031037654A6228FA7FE0EB66A9A54 /* onnxruntime_cxx_inline.h */,
-				E7C1F46D909CA039ACC46241FDC27118 /* onnxruntime_float16.h */,
-				2612E599A39BF4E8196A5341B4547214 /* onnxruntime_run_options_config_keys.h */,
-				F9CFB10CBB0F708B100F413BC31A915D /* onnxruntime_session_options_config_keys.h */,
-				AA38312E76D96F19A03EFB54A58C50C1 /* Frameworks */,
-				2E19658D43896B3F5BCE53B22FC07329 /* Support Files */,
+				98A39C28B5D62A6F6E709DE9B9472F15 /* coreml_provider_factory.h */,
+				459302BB8F3FB6DE6B5BE7321DF722EC /* cpu_provider_factory.h */,
+				F46CE3CA28C84A05FEAF94FFBFF9FD96 /* onnxruntime_c_api.h */,
+				8CCD8D6D475303B5328A9D22C6C03F83 /* onnxruntime_cxx_api.h */,
+				039D095C0D85CA5C06545B61E0E2D186 /* onnxruntime_cxx_inline.h */,
+				5BA94D2DE390EBDE267C5A79A43353DA /* onnxruntime_float16.h */,
+				99D38908DAF0E77F98E067694199C241 /* onnxruntime_run_options_config_keys.h */,
+				FB2F8B6C74B07BDC1EFE187028FC842F /* onnxruntime_session_options_config_keys.h */,
+				B2B32343BAC98CDE4060C70CC8BA985A /* Frameworks */,
+				E7605E774CC7D9EE7C2EA6AB4A060D96 /* Support Files */,
 			);
 			name = "onnxruntime-mobile-c";
 			path = "onnxruntime-mobile-c";
 			sourceTree = "<group>";
 		};
-		CE0B853EEB0C5F956B7B5D2542534BE8 /* Support Files */ = {
+		A0A32EDDB1D2CDBAB66777B38E9052D5 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				194AC15FB33512F05DB01403DADCAC28 /* TensorFlowLiteSwift.modulemap */,
-				100DAD856AC11F5583ED7EFC550BAC51 /* TensorFlowLiteSwift-dummy.m */,
-				99AC74701713774F588570CEFA812A6D /* TensorFlowLiteSwift-Info.plist */,
-				F13AE8336B04B5A93D8B681761254959 /* TensorFlowLiteSwift-prefix.pch */,
-				A6044EDE7FE04E33AB0EDACF95391EEE /* TensorFlowLiteSwift-umbrella.h */,
-				FCCF120F1E257A7A1FFA6DABA342C7DB /* TensorFlowLiteSwift.debug.xcconfig */,
-				C0CE9C20DFEB15DB2CA2DE6920CD9584 /* TensorFlowLiteSwift.release.xcconfig */,
+				530064A6EB29F5C776D7CFFDD6ABE263 /* onnxruntime-mobile-c */,
 			);
-			name = "Support Files";
-			path = "../Target Support Files/TensorFlowLiteSwift";
+			name = Pods;
+			sourceTree = "<group>";
+		};
+		B2B32343BAC98CDE4060C70CC8BA985A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				2AF25F099B7E1100D80B10A9DF791616 /* onnxruntime.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		CF1408CF629C7361332E53B88F7BD30C = {
@@ -282,8 +120,8 @@
 			children = (
 				9D940727FF8FB9C785EB98E56350EF41 /* Podfile */,
 				D210D550F4EA176C3123ED886F8F87F5 /* Frameworks */,
-				94475DF0132CC62128A32337236A9A3B /* Pods */,
-				1FE569CB5E78959D2067DADBFF374230 /* Products */,
+				A0A32EDDB1D2CDBAB66777B38E9052D5 /* Pods */,
+				FD8018F4DF0A851562AA92990A4CCAD7 /* Products */,
 				296F6EF130ADA346FBE858A3FFAED0D2 /* Targets Support Files */,
 			);
 			sourceTree = "<group>";
@@ -304,6 +142,17 @@
 			name = iOS;
 			sourceTree = "<group>";
 		};
+		E7605E774CC7D9EE7C2EA6AB4A060D96 /* Support Files */ = {
+			isa = PBXGroup;
+			children = (
+				CDA3275DA8CC4E0BC15290AD4B18875B /* onnxruntime-mobile-c-xcframeworks.sh */,
+				2CF785892C4C9F305632D7019D80CA87 /* onnxruntime-mobile-c.debug.xcconfig */,
+				D40217A399DD161D66B634EFFF9C3FFF /* onnxruntime-mobile-c.release.xcconfig */,
+			);
+			name = "Support Files";
+			path = "../Target Support Files/onnxruntime-mobile-c";
+			sourceTree = "<group>";
+		};
 		EE934E5AA92A98A76339382460D350CB /* Pods-TryAngleApp */ = {
 			isa = PBXGroup;
 			children = (
@@ -320,72 +169,41 @@
 			path = "Target Support Files/Pods-TryAngleApp";
 			sourceTree = "<group>";
 		};
-		F2364750D6D149C186C7943241969D66 /* TensorFlowLiteSwift */ = {
+		FD8018F4DF0A851562AA92990A4CCAD7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				9438E09FE7AA27389B4F07BFC4C977DA /* Core */,
-				CE0B853EEB0C5F956B7B5D2542534BE8 /* Support Files */,
+				E92BD81CB82E8AE22B29AE1E0E93F1C7 /* Pods-TryAngleApp */,
 			);
-			name = TensorFlowLiteSwift;
-			path = TensorFlowLiteSwift;
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
-		45DF784C1168764D2FC4DA47C502E054 /* Headers */ = {
+		8B7B423DBC98850DFD8E337BC3E351F0 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3EC459D0C3A518BCA5C7396CC6BC0CFA /* TensorFlowLiteSwift-umbrella.h in Headers */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F7524E9F9388D575562B4D27EB45EA25 /* Headers */ = {
-			isa = PBXHeadersBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				69D82A954913318190C41129DD34E897 /* Pods-TryAngleApp-umbrella.h in Headers */,
+				1034C3A1A39F7AF8EDC56185F6F2C20C /* Pods-TryAngleApp-umbrella.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		10418167F619D6DA72BADAD10F9EC02B /* TensorFlowLiteSwift */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 0CDC2D7FBE10ED5E4A1CE98618D01D47 /* Build configuration list for PBXNativeTarget "TensorFlowLiteSwift" */;
-			buildPhases = (
-				45DF784C1168764D2FC4DA47C502E054 /* Headers */,
-				EE5E0395C470B8ACB07E0CBD72794ED2 /* Sources */,
-				658B0AA041F79D1F5DE460CE61C078CC /* Frameworks */,
-				E150FACD74E9DB8A945F348FC5988FC9 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				D413C5387BFABC71E6B57B79879C5E6A /* PBXTargetDependency */,
-			);
-			name = TensorFlowLiteSwift;
-			productName = TensorFlowLite;
-			productReference = E0B71FE13AA6B05010059EB4B8D87919 /* TensorFlowLiteSwift */;
-			productType = "com.apple.product-type.framework";
-		};
 		B4BF249ADC5AE4586B5FA710EED8DEF8 /* Pods-TryAngleApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 18E49D96F7571054A82AEFABE51B3874 /* Build configuration list for PBXNativeTarget "Pods-TryAngleApp" */;
+			buildConfigurationList = 0F0A8BA159FB418E13CCFC3B54AF7EE9 /* Build configuration list for PBXNativeTarget "Pods-TryAngleApp" */;
 			buildPhases = (
-				F7524E9F9388D575562B4D27EB45EA25 /* Headers */,
-				D1D4D70AA03B9B3EFF9041235FD95B61 /* Sources */,
-				823B660C7DC1DD7831479D0509076FD1 /* Frameworks */,
-				F0F56BAD62E3469CB728C7DBBAD395A9 /* Resources */,
+				8B7B423DBC98850DFD8E337BC3E351F0 /* Headers */,
+				E3C808FFCE60908030A1E902A4DEAF60 /* Sources */,
+				54D3C0756D027060F22467D10ECFCCB2 /* Frameworks */,
+				FCC02E4B6604325C97461EBC9C435A15 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				76A7B91B552C6DEC95280D1261EBCAED /* PBXTargetDependency */,
-				76C47AE9C632EA1DC2F4FF9FA58A17B1 /* PBXTargetDependency */,
-				204E9ABBF6DA5334EC11BAE182420672 /* PBXTargetDependency */,
+				566F1B6769E4B248489719222E3C9662 /* PBXTargetDependency */,
 			);
 			name = "Pods-TryAngleApp";
 			productName = Pods_TryAngleApp;
@@ -412,27 +230,18 @@
 			mainGroup = CF1408CF629C7361332E53B88F7BD30C;
 			minimizedProjectReferenceProxies = 0;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 1FE569CB5E78959D2067DADBFF374230 /* Products */;
+			productRefGroup = FD8018F4DF0A851562AA92990A4CCAD7 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				DDF6BCCB08B331B5F6F8EC5AE626B7DF /* onnxruntime-mobile-c */,
 				B4BF249ADC5AE4586B5FA710EED8DEF8 /* Pods-TryAngleApp */,
-				AC559E53E13B6FBEF4F5CC310A73AFE6 /* TensorFlowLiteC */,
-				10418167F619D6DA72BADAD10F9EC02B /* TensorFlowLiteSwift */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E150FACD74E9DB8A945F348FC5988FC9 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F0F56BAD62E3469CB728C7DBBAD395A9 /* Resources */ = {
+		FCC02E4B6604325C97461EBC9C435A15 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -459,184 +268,32 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/onnxruntime-mobile-c/onnxruntime-mobile-c-xcframeworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		E428E9B2EB9A04CAA5BA04B652A1082B /* [CP] Copy XCFrameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/TensorFlowLiteC/TensorFlowLiteC-xcframeworks-input-files.xcfilelist",
-			);
-			name = "[CP] Copy XCFrameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/TensorFlowLiteC/TensorFlowLiteC-xcframeworks-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/TensorFlowLiteC/TensorFlowLiteC-xcframeworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		D1D4D70AA03B9B3EFF9041235FD95B61 /* Sources */ = {
+		E3C808FFCE60908030A1E902A4DEAF60 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C1DCDAC7861C1751E38DB93F42A0830D /* Pods-TryAngleApp-dummy.m in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		EE5E0395C470B8ACB07E0CBD72794ED2 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				94178AE1F69757DDBF5B812982044746 /* Delegate.swift in Sources */,
-				EA9F80BE4681AD4751C94135B4FDD6E1 /* Interpreter.swift in Sources */,
-				4249272F70FB8DD93EE531EF97C64CA6 /* InterpreterError.swift in Sources */,
-				FB7B5329D39CC467BF41D2DCC5FC544D /* Model.swift in Sources */,
-				08E1C0857669109A87E2303DDFEAC5D9 /* QuantizationParameters.swift in Sources */,
-				6DCD998CA7F76F86662F2FA434770458 /* SignatureRunner.swift in Sources */,
-				66BBE8F56BA0938D4D868B4B79585928 /* SignatureRunnerError.swift in Sources */,
-				6FF1D029C99A94F56122EB126BE8047A /* Tensor.swift in Sources */,
-				A0A4402F987271FBA80C438ACC0C5CC7 /* TensorFlowLite.swift in Sources */,
-				55229A3614144E889EE7669B11506DCA /* TensorFlowLiteSwift-dummy.m in Sources */,
+				86724E3A5B45DB3EDD59665804214B84 /* Pods-TryAngleApp-dummy.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		204E9ABBF6DA5334EC11BAE182420672 /* PBXTargetDependency */ = {
+		566F1B6769E4B248489719222E3C9662 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "onnxruntime-mobile-c";
 			target = DDF6BCCB08B331B5F6F8EC5AE626B7DF /* onnxruntime-mobile-c */;
-			targetProxy = D93ECA2F6CD5F67F0F44827211A9186C /* PBXContainerItemProxy */;
-		};
-		76A7B91B552C6DEC95280D1261EBCAED /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = TensorFlowLiteC;
-			target = AC559E53E13B6FBEF4F5CC310A73AFE6 /* TensorFlowLiteC */;
-			targetProxy = 214A52BA4E5257AB15281D79DE857548 /* PBXContainerItemProxy */;
-		};
-		76C47AE9C632EA1DC2F4FF9FA58A17B1 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = TensorFlowLiteSwift;
-			target = 10418167F619D6DA72BADAD10F9EC02B /* TensorFlowLiteSwift */;
-			targetProxy = E3243E209E5A88D0C092A3CBC2C3BF48 /* PBXContainerItemProxy */;
-		};
-		D413C5387BFABC71E6B57B79879C5E6A /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = TensorFlowLiteC;
-			target = AC559E53E13B6FBEF4F5CC310A73AFE6 /* TensorFlowLiteC */;
-			targetProxy = E3F9FFA75511A7161154151F3525E981 /* PBXContainerItemProxy */;
+			targetProxy = 8902C2F03F5AA25A2A18343ADE32696E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		49EA4A532F77DDD1F2A63A415522EAA2 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2F9037AD50A90BED17BE552BCCEC396A /* TensorFlowLiteC.release.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		4A1595DA2CB85584428C076150DFE7D5 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = FCCF120F1E257A7A1FFA6DABA342C7DB /* TensorFlowLiteSwift.debug.xcconfig */;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
-				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = NO;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_PREFIX_HEADER = "Target Support Files/TensorFlowLiteSwift/TensorFlowLiteSwift-prefix.pch";
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Target Support Files/TensorFlowLiteSwift/TensorFlowLiteSwift-Info.plist";
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MACH_O_TYPE = staticlib;
-				MODULEMAP_FILE = "Target Support Files/TensorFlowLiteSwift/TensorFlowLiteSwift.modulemap";
-				PRODUCT_MODULE_NAME = TensorFlowLite;
-				PRODUCT_NAME = TensorFlowLite;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
-				SWIFT_INSTALL_OBJC_HEADER = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VERSIONING_SYSTEM = "apple-generic";
-				VERSION_INFO_PREFIX = "";
-			};
-			name = Debug;
-		};
-		64558432AECFB5797AD24A08873CDA65 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = C0CE9C20DFEB15DB2CA2DE6920CD9584 /* TensorFlowLiteSwift.release.xcconfig */;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
-				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
-				DYLIB_COMPATIBILITY_VERSION = 1;
-				DYLIB_CURRENT_VERSION = 1;
-				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = NO;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_PREFIX_HEADER = "Target Support Files/TensorFlowLiteSwift/TensorFlowLiteSwift-prefix.pch";
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Target Support Files/TensorFlowLiteSwift/TensorFlowLiteSwift-Info.plist";
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MACH_O_TYPE = staticlib;
-				MODULEMAP_FILE = "Target Support Files/TensorFlowLiteSwift/TensorFlowLiteSwift.modulemap";
-				PRODUCT_MODULE_NAME = TensorFlowLite;
-				PRODUCT_NAME = TensorFlowLite;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
-				SWIFT_INSTALL_OBJC_HEADER = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-				VERSIONING_SYSTEM = "apple-generic";
-				VERSION_INFO_PREFIX = "";
-			};
-			name = Release;
-		};
 		6FD327C355C83E31B95DAC43C939F7FF /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 56A3C1F968B8D5E067BB364490140D12 /* onnxruntime-mobile-c.release.xcconfig */;
+			baseConfigurationReference = D40217A399DD161D66B634EFFF9C3FFF /* onnxruntime-mobile-c.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -653,9 +310,9 @@
 			};
 			name = Release;
 		};
-		8679D142C44C2F480E5BD97C06B1030F /* Release */ = {
+		8DD73D7822B0283D8A455B9549FC5A89 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 67A3E1A5DE0AA87C83AD712957C36322 /* Pods-TryAngleApp.release.xcconfig */;
+			baseConfigurationReference = 5F48D77E10D5B30766F61E1DA3FAA0AC /* Pods-TryAngleApp.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -687,11 +344,10 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
-			name = Release;
+			name = Debug;
 		};
 		90D4D09BCB6A4660E43ACBE9ECB6FE9A /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -821,27 +477,9 @@
 			};
 			name = Release;
 		};
-		A9EC44EB3689FF47E9D0292929D295AE /* Debug */ = {
+		EB83B01530420BFCC681583461C347F6 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 37E2E2DE199D1BF096FF7284B8AE8BFC /* TensorFlowLiteC.debug.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		DE5A6BBD7FC02DC1F1C640A0633109C0 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 5F48D77E10D5B30766F61E1DA3FAA0AC /* Pods-TryAngleApp.debug.xcconfig */;
+			baseConfigurationReference = 67A3E1A5DE0AA87C83AD712957C36322 /* Pods-TryAngleApp.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -873,14 +511,15 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
-			name = Debug;
+			name = Release;
 		};
 		F9674D283663743662AD70A31FBC59EE /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2035BDC0C179FE279B6B106E8FCD38AB /* onnxruntime-mobile-c.debug.xcconfig */;
+			baseConfigurationReference = 2CF785892C4C9F305632D7019D80CA87 /* onnxruntime-mobile-c.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -899,20 +538,11 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0CDC2D7FBE10ED5E4A1CE98618D01D47 /* Build configuration list for PBXNativeTarget "TensorFlowLiteSwift" */ = {
+		0F0A8BA159FB418E13CCFC3B54AF7EE9 /* Build configuration list for PBXNativeTarget "Pods-TryAngleApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4A1595DA2CB85584428C076150DFE7D5 /* Debug */,
-				64558432AECFB5797AD24A08873CDA65 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		18E49D96F7571054A82AEFABE51B3874 /* Build configuration list for PBXNativeTarget "Pods-TryAngleApp" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				DE5A6BBD7FC02DC1F1C640A0633109C0 /* Debug */,
-				8679D142C44C2F480E5BD97C06B1030F /* Release */,
+				8DD73D7822B0283D8A455B9549FC5A89 /* Debug */,
+				EB83B01530420BFCC681583461C347F6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -922,15 +552,6 @@
 			buildConfigurations = (
 				90D4D09BCB6A4660E43ACBE9ECB6FE9A /* Debug */,
 				9553C89E183877A5CB2F3C6801BEC129 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		636D81D05741D892734E9C70745D0DB7 /* Build configuration list for PBXAggregateTarget "TensorFlowLiteC" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A9EC44EB3689FF47E9D0292929D295AE /* Debug */,
-				49EA4A532F77DDD1F2A63A415522EAA2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
