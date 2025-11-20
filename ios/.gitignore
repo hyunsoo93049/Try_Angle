@@ -91,3 +91,8 @@ iOSInjectionProject/
 
 ## macOS
 .DS_Store
+
+# 핵심 알고리즘 (비공개 - 공모전 기간)
+TryAngleApp/Services/RuleEngine/CompositionAnalyzer.swift
+TryAngleApp/Services/RuleEngine/CameraAngleDetector.swift
+TryAngleApp/Services/Comparison/AdaptivePoseComparator.swift
