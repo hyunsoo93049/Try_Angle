@@ -1,6 +1,5 @@
 # 📸 TryAngle
 
-> AI-Powered Photography Guide System
 > 레퍼런스 이미지를 분석하여 실시간으로 촬영 가이드를 제공하는 AI 시스템
 
 [![Version](https://img.shields.io/badge/Version-2.0.0-brightgreen.svg)](https://github.com/hyunsoo93049/Try_Angle/releases/tag/v2.0.0)
