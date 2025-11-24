@@ -209,10 +209,12 @@ struct ContentView: View {
                     .ignoresSafeArea()
             }
 
-            // 3. 접었다 펼칠 수 있는 상단바
+            // 3. 접었다 펼칠 수 있는 상단바 (오른쪽 아래)
             VStack {
+                Spacer()  // ← ① Spacer를 위로 이동 (버튼을 아래로 보냄)
+
                 HStack {
-                    Spacer()
+                    Spacer()  // ← 오른쪽 정렬 유지
 
                     if showCameraOptions {
                         // 펼쳐진 상태: 플래시, 비율, 설정, 닫기
@@ -298,9 +300,7 @@ struct ContentView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, safeAreaTop + 10)
-
-                Spacer()
+                .padding(.bottom, safeAreaBottom + 80)  // ← ② .bottom으로 변경 (탭바 위에 배치)
             }
 
             // 4. 피드백 오버레이 (실시간 + 서버 피드백 통합)
