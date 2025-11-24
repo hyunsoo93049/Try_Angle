@@ -210,10 +210,8 @@ struct ContentView: View {
 
             // 3. 미니멀 상단바 (플래시, 비율, 설정만)
             VStack {
-                HStack(spacing: 16) {
-                    Spacer()
-
-                    // 플래시
+                HStack(spacing: 0) {
+                    // 왼쪽: 플래시
                     Button(action: {
                         cameraManager.toggleFlash()
                     }) {
@@ -224,8 +222,11 @@ struct ContentView: View {
                             .background(.ultraThinMaterial)
                             .clipShape(Circle())
                     }
+                    .zIndex(1)
 
-                    // 비율 선택
+                    Spacer()
+
+                    // 중앙: 비율 선택
                     Menu {
                         ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
                             Button(action: {
@@ -248,8 +249,11 @@ struct ContentView: View {
                             .background(.ultraThinMaterial)
                             .cornerRadius(20)
                     }
+                    .zIndex(2)
 
-                    // 설정
+                    Spacer()
+
+                    // 오른쪽: 설정
                     Button(action: {
                         showSettings = true
                     }) {
@@ -260,6 +264,7 @@ struct ContentView: View {
                             .background(.ultraThinMaterial)
                             .clipShape(Circle())
                     }
+                    .zIndex(3)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, safeAreaTop + 10)
@@ -388,66 +393,66 @@ struct ContentView: View {
                 }
             }
 
-            // 6. 하단 컨트롤
-            VStack {
-                Spacer()
-
-                HStack(alignment: .center, spacing: 0) {
-                    // 레퍼런스 선택
-                    ReferenceSelector(selectedImage: $referenceImage)
-                        .onChange(of: referenceImage) { newImage in
-                            if let image = newImage {
-                                realtimeAnalyzer.analyzeReference(image)
-                                startRealtimeAnalysis()
-                                startAnalysis()
-                            } else {
-                                stopRealtimeAnalysis()
-                                stopAnalysis()
-                            }
-                        }
-
-                    Spacer()
-
-                    // 촬영 버튼
-                    Button(action: {
-                        performCapture()
-                    }) {
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white, lineWidth: 4)
-                                .frame(width: 80, height: 80)
-
-                            Circle()
-                                .fill(capturedImage != nil ? Color.green : Color.white)
-                                .frame(width: 68, height: 68)
-
-                            if capturedImage != nil {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    .disabled(capturedImage != nil)
-                    .opacity(capturedImage != nil ? 0.8 : 1.0)
-
-                    Spacer()
-
-                    // 카메라 전환
-                    Button(action: {
-                        cameraManager.switchCamera()
-                    }) {
-                        Image(systemName: "arrow.triangle.2.circlepath.camera")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .frame(width: 50, height: 50)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(.horizontal, 30)
-                .padding(.bottom, max(safeAreaBottom, 20) + 30)
-            }
+            // 6. 하단 컨트롤 (MainTabView의 탭바로 대체됨)
+            // VStack {
+            //     Spacer()
+            //
+            //     HStack(alignment: .center, spacing: 0) {
+            //         // 레퍼런스 선택 (레퍼런스 탭으로 이동)
+            //         ReferenceSelector(selectedImage: $referenceImage)
+            //             .onChange(of: referenceImage) { newImage in
+            //                 if let image = newImage {
+            //                     realtimeAnalyzer.analyzeReference(image)
+            //                     startRealtimeAnalysis()
+            //                     startAnalysis()
+            //                 } else {
+            //                     stopRealtimeAnalysis()
+            //                     stopAnalysis()
+            //                 }
+            //             }
+            //
+            //         Spacer()
+            //
+            //         // 촬영 버튼 (탭바로 이동)
+            //         Button(action: {
+            //             performCapture()
+            //         }) {
+            //             ZStack {
+            //                 Circle()
+            //                     .stroke(Color.white, lineWidth: 4)
+            //                     .frame(width: 80, height: 80)
+            //
+            //                 Circle()
+            //                     .fill(capturedImage != nil ? Color.green : Color.white)
+            //                     .frame(width: 68, height: 68)
+            //
+            //                 if capturedImage != nil {
+            //                     Image(systemName: "checkmark")
+            //                         .font(.system(size: 28, weight: .bold))
+            //                         .foregroundColor(.white)
+            //                 }
+            //             }
+            //         }
+            //         .disabled(capturedImage != nil)
+            //         .opacity(capturedImage != nil ? 0.8 : 1.0)
+            //
+            //         Spacer()
+            //
+            //         // 카메라 전환 (탭바로 이동)
+            //         Button(action: {
+            //             cameraManager.switchCamera()
+            //         }) {
+            //             Image(systemName: "arrow.triangle.2.circlepath.camera")
+            //                 .font(.system(size: 24))
+            //                 .foregroundColor(.white)
+            //                 .frame(width: 50, height: 50)
+            //                 .background(.ultraThinMaterial)
+            //                 .clipShape(Circle())
+            //         }
+            //     }
+            //     .padding(.horizontal, 30)
+            //     .padding(.bottom, max(safeAreaBottom, 20) + 30)
+            // }
 
             // 에러 메시지
             if let error = errorMessage {
