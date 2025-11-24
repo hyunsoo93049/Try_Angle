@@ -17,7 +17,7 @@ struct TryAngleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
     }
 }
