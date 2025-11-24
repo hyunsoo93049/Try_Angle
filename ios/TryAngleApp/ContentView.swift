@@ -286,7 +286,7 @@ struct ContentView: View {
                 updateCombinedFeedback()
             }
 
-            // 레퍼런스 선택 안내
+            // 레퍼런스 선택 안내 (탭바로 이동)
             if referenceImage == nil {
                 VStack(spacing: 0) {
                     Spacer()
@@ -302,7 +302,7 @@ struct ContentView: View {
                         .cornerRadius(16)
                         .shadow(radius: 10)
 
-                    Text("왼쪽 하단의 버튼을 눌러\n따라 찍고 싶은 사진을 선택하세요")
+                    Text("하단 '레퍼런스' 탭에서\n따라 찍고 싶은 사진을 선택하세요")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)

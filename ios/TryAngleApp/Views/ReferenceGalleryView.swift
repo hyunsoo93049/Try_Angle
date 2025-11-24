@@ -11,29 +11,32 @@ struct ReferenceGalleryView: View {
     let sampleImages = Array(1...20)
 
     var body: some View {
-        ZStack {
-            Color.white.ignoresSafeArea()
+        GeometryReader { geometry in
+            let safeAreaTop = geometry.safeAreaInsets.top
 
-            VStack(spacing: 0) {
-                // 상단 바 + 검색
-                VStack(spacing: 8) {
-                    // 뒤로가기 버튼
-                    HStack {
-                        Button(action: {
-                            // 카메라 탭으로 이동하려면 부모 뷰에서 처리 필요
-                        }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.black)
-                                .frame(width: 29, height: 29)
-                                .background(Color(hex: "#ececec"))
-                                .clipShape(Circle())
+            ZStack {
+                Color.white.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // 상단 바 + 검색
+                    VStack(spacing: 8) {
+                        // 뒤로가기 버튼
+                        HStack {
+                            Button(action: {
+                                // 카메라 탭으로 이동하려면 부모 뷰에서 처리 필요
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.black)
+                                    .frame(width: 29, height: 29)
+                                    .background(Color(hex: "#ececec"))
+                                    .clipShape(Circle())
+                            }
+                            .padding(.leading, 10)
+
+                            Spacer()
                         }
-                        .padding(.leading, 10)
-
-                        Spacer()
-                    }
-                    .padding(.top, 25)
+                        .padding(.top, max(safeAreaTop, 10) + 15)
 
                     // 검색바
                     HStack(spacing: 10) {
