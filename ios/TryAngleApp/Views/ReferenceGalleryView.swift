@@ -124,15 +124,20 @@ struct PhotoCard: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 15) {
-            // 이미지
-            Image(systemName: imageName)
-                .resizable()
-                .scaledToFill()
+            // 이미지 (placeholder)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hex: "#e0e0e0"), Color(hex: "#f5f5f5")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .frame(width: 184, height: 184)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(hex: "#f0f0f0"))
+                .overlay(
+                    Image(systemName: "photo")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray.opacity(0.5))
                 )
 
             // 하트 버튼
