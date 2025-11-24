@@ -6,21 +6,24 @@ struct GalleryView: View {
     @State private var selectedPhoto: PHAsset?
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            let safeAreaTop = geometry.safeAreaInsets.top
 
-            VStack(spacing: 0) {
-                // 상단 바
-                HStack {
-                    Text("갤러리")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white)
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 54)
-                .padding(.bottom, 10)
+                VStack(spacing: 0) {
+                    // 상단 바
+                    HStack {
+                        Text("갤러리")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, max(safeAreaTop, 10) + 10)
+                    .padding(.bottom, 10)
 
                 // 사진 그리드
                 ScrollView {
