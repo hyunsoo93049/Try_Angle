@@ -14,19 +14,19 @@ struct ContentView: View {
     @State private var analysisTimer: Timer?
     @State private var frameUpdateTimer: Timer?  // 실시간 프레임 분석용
 
-    // 안드로이드 기능 추가
+    // UI 상태
     @State private var showGrid = false
     @State private var showFPS = false
-    @State private var zoomLevel: CGFloat = 1.0
-    @State private var analysisEnabled = true  // 분석 모드 on/off
-    @State private var autoCapture = true  // 자동 촬영 모드
-    @State private var capturedImage: UIImage?  // 촬영된 이미지
-    @State private var showCaptureFlash = false  // 촬영 플래시 효과
-
-    // 🆕 비율 선택
+    @State private var autoCapture = true
+    @State private var capturedImage: UIImage?
+    @State private var showCaptureFlash = false
     @State private var selectedAspectRatio: CameraAspectRatio = .ratio4_3
-    @State private var showAspectRatioMenu = false
-    @State private var debugAlert = false
+    @State private var showSettings = false  // 설정 시트
+
+    // AI 분석은 레퍼런스 선택 시 자동 활성화
+    private var analysisEnabled: Bool {
+        referenceImage != nil
+    }
 
     // 통합 피드백 (실시간 + 서버)
     private var combinedFeedback: [FeedbackItem] {
@@ -171,11 +171,8 @@ struct ContentView: View {
                         .allowsHitTesting(false)
                 }
                 .onAppear {
-                    print("🎥🎥🎥 ContentView onAppear 호출됨 🎥🎥🎥")
-                    debugAlert = true
                     cameraManager.setupSession()
                     cameraManager.startSession()
-                    print("🎥🎥🎥 카메라 세션 시작 완료 🎥🎥🎥")
                 }
                 .onDisappear {
                     cameraManager.stopSession()
@@ -206,95 +203,24 @@ struct ContentView: View {
                     .ignoresSafeArea()
             }
 
-            // 3. 상단 툴바
+            // 3. 미니멀 상단바 (플래시, 비율, 설정만)
             VStack {
-                // 첫번째 행: 그리드, 플래시, 분석 모드
                 HStack(spacing: 16) {
-                    // 그리드 토글
-                    Button(action: {
-                        showGrid.toggle()
-                    }) {
-                        Image(systemName: showGrid ? "grid" : "grid.circle")
-                            .font(.title3)
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
+                    Spacer()
 
-                    // Flash 토글
+                    // 플래시
                     Button(action: {
                         cameraManager.toggleFlash()
                     }) {
                         Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
-                            .font(.title3)
+                            .font(.system(size: 20))
                             .foregroundColor(cameraManager.isFlashOn ? .yellow : .white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
+                            .frame(width: 40, height: 40)
+                            .background(.ultraThinMaterial)
                             .clipShape(Circle())
                     }
 
-                    // 분석 모드 토글
-                    Button(action: {
-                        analysisEnabled.toggle()
-                        if !analysisEnabled {
-                            feedbackItems = []
-                            processingTime = ""
-                        }
-                    }) {
-                        Image(systemName: analysisEnabled ? "wand.and.stars" : "wand.and.stars.inverse")
-                            .font(.title3)
-                            .foregroundColor(analysisEnabled ? .cyan : .white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-
-                    // 자동 촬영 토글
-                    Button(action: {
-                        autoCapture.toggle()
-                    }) {
-                        Image(systemName: autoCapture ? "camera.fill" : "camera")
-                            .font(.title3)
-                            .foregroundColor(autoCapture ? .yellow : .white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 60)
-
-                // 두번째 행: FPS 토글 및 비율 선택
-                HStack(spacing: 16) {
-                    // FPS 토글
-                    Button(action: {
-                        showFPS.toggle()
-                    }) {
-                        Image(systemName: showFPS ? "info.circle.fill" : "info.circle")
-                            .font(.title3)
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-
-                    // FPS 표시
-                    if showFPS {
-                        Text(String(format: "%.1f FPS", cameraManager.currentFPS))
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.black.opacity(0.6))
-                            .cornerRadius(8)
-                    }
-
-                    Spacer()
-
-                    // 🆕 비율 선택 버튼
+                    // 비율 선택
                     Menu {
                         ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
                             Button(action: {
@@ -310,16 +236,28 @@ struct ContentView: View {
                         }
                     } label: {
                         Text(selectedAspectRatio.displayName)
-                            .font(.caption)
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.blue.opacity(0.7))
-                            .cornerRadius(8)
+                            .padding(.vertical, 8)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(20)
+                    }
+
+                    // 설정
+                    Button(action: {
+                        showSettings = true
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, 20)
+                .padding(.top, 60)
 
                 Spacer()
             }
@@ -421,38 +359,42 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
-            // 완성도 점수 표시 (디버깅용)
-            if showFPS {
+
+            // 5. 레퍼런스 썸네일 (왼쪽 하단)
+            if let refImage = referenceImage {
                 VStack {
-                    HStack {
-                        Spacer()
-                        Text(String(format: "완성도: %.0f%%", realtimeAnalyzer.perfectScore * 100))
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.blue.opacity(0.6))
-                            .cornerRadius(8)
-                            .padding(.trailing, 16)
-                    }
-                    .padding(.top, 200)
                     Spacer()
+                    HStack {
+                        Image(uiImage: refImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 70, height: 70)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.white, lineWidth: 2)
+                            )
+                            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                            .padding(.leading, 20)
+                            .padding(.bottom, 160)
+
+                        Spacer()
+                    }
                 }
             }
 
-            // 5. 하단 컨트롤
+            // 6. 하단 컨트롤
             VStack {
                 Spacer()
 
-                HStack(alignment: .center, spacing: 20) {
+                HStack(alignment: .center, spacing: 0) {
                     // 레퍼런스 선택
                     ReferenceSelector(selectedImage: $referenceImage)
                         .onChange(of: referenceImage) { newImage in
                             if let image = newImage {
-                                // 레퍼런스 분석
                                 realtimeAnalyzer.analyzeReference(image)
-                                startRealtimeAnalysis()  // 실시간 분석 시작
-                                startAnalysis()          // 서버 분석도 병행 (포즈용)
+                                startRealtimeAnalysis()
+                                startAnalysis()
                             } else {
                                 stopRealtimeAnalysis()
                                 stopAnalysis()
@@ -461,45 +403,45 @@ struct ContentView: View {
 
                     Spacer()
 
-                    // 촬영 버튼 (중앙)
+                    // 촬영 버튼
                     Button(action: {
                         performCapture()
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color.white)
-                                .frame(width: 70, height: 70)
+                                .stroke(Color.white, lineWidth: 4)
+                                .frame(width: 80, height: 80)
 
                             Circle()
-                                .stroke(Color.white, lineWidth: 3)
-                                .frame(width: 82, height: 82)
+                                .fill(capturedImage != nil ? Color.green : Color.white)
+                                .frame(width: 68, height: 68)
 
                             if capturedImage != nil {
                                 Image(systemName: "checkmark")
-                                    .font(.title)
-                                    .foregroundColor(.green)
+                                    .font(.system(size: 28, weight: .bold))
+                                    .foregroundColor(.white)
                             }
                         }
                     }
                     .disabled(capturedImage != nil)
-                    .opacity(capturedImage != nil ? 0.5 : 1.0)
+                    .opacity(capturedImage != nil ? 0.8 : 1.0)
 
                     Spacer()
 
-                    // 카메라 전환 버튼
+                    // 카메라 전환
                     Button(action: {
                         cameraManager.switchCamera()
                     }) {
-                        Image(systemName: "camera.rotate")
-                            .font(.title2)
+                        Image(systemName: "arrow.triangle.2.circlepath.camera")
+                            .font(.system(size: 24))
                             .foregroundColor(.white)
                             .frame(width: 50, height: 50)
-                            .background(Color.black.opacity(0.6))
+                            .background(.ultraThinMaterial)
                             .clipShape(Circle())
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
+                .padding(.horizontal, 30)
+                .padding(.bottom, 50)
             }
 
             // 4. 에러 메시지
@@ -536,73 +478,50 @@ struct ContentView: View {
                 }
             }
 
-            // 🐛 디버그 오버레이 (포즈 감지 상태 표시)
-            VStack {
-                Spacer()
-                HStack {
+            // 디버그 오버레이 (showFPS 활성화 시에만)
+            if showFPS {
+                VStack {
                     Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        // 레퍼런스 포즈 키포인트
-                        if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints {
-                            let visibleCount = refPose.filter { $0.confidence >= 0.5 }.count
-                            let color: Color = visibleCount >= 10 ? .green : (visibleCount >= 5 ? .yellow : .red)
-                            Text("레퍼런스: \(visibleCount)/\(refPose.count)개")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(color)
-                                .padding(4)
-                                .background(Color.black.opacity(0.7))
-                                .cornerRadius(4)
-                        } else {
-                            Text("레퍼런스 포즈: 없음 ⚠️")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.red)
-                                .padding(4)
-                                .background(Color.black.opacity(0.7))
-                                .cornerRadius(4)
-                        }
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            // FPS
+                            Text(String(format: "%.1f FPS", cameraManager.currentFPS))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(6)
 
-                        // 현재 프레임의 포즈 피드백 표시
-                        let poseFeedbacks = combinedFeedback.filter { $0.icon == "💪" }
-                        if !poseFeedbacks.isEmpty {
-                            Text("포즈 피드백: \(poseFeedbacks.count)개")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.orange)
-                                .padding(4)
-                                .background(Color.black.opacity(0.7))
-                                .cornerRadius(4)
-                        } else if referenceImage != nil {
-                            // 레퍼런스 포즈가 있을 때만 "일치" 표시
-                            if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints,
-                               refPose.filter({ $0.confidence >= 0.5 }).count >= 5 {
-                                Text("포즈: 일치 ✓")
+                            // 레퍼런스 포즈 키포인트
+                            if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints {
+                                let visibleCount = refPose.filter { $0.confidence >= 0.5 }.count
+                                let color: Color = visibleCount >= 10 ? .green : (visibleCount >= 5 ? .yellow : .red)
+                                Text("레퍼런스: \(visibleCount)/\(refPose.count)개")
                                     .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.green)
-                                    .padding(4)
-                                    .background(Color.black.opacity(0.7))
-                                    .cornerRadius(4)
-                            } else {
-                                Text("포즈: 비교 불가")
+                                    .foregroundColor(color)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(6)
+                            }
+
+                            // 완성도
+                            if referenceImage != nil {
+                                let score = Int(realtimeAnalyzer.perfectScore * 100)
+                                Text("완성도: \(score)%")
                                     .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.gray)
-                                    .padding(4)
-                                    .background(Color.black.opacity(0.7))
-                                    .cornerRadius(4)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(6)
                             }
                         }
-
-                        // 완성도 표시
-                        if referenceImage != nil {
-                            let score = Int(realtimeAnalyzer.perfectScore * 100)
-                            Text("완성도: \(score)%")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(score > 100 ? .red : .white)
-                                .padding(4)
-                                .background(Color.black.opacity(0.7))
-                                .cornerRadius(4)
-                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 140)
                     }
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 120)
                 }
             }
         }
@@ -619,10 +538,12 @@ struct ContentView: View {
                 realtimeAnalyzer.analyzeFrame(currentFrame, isFrontCamera: cameraManager.isFrontCamera)
             }
         }
-        .alert("앱 초기화 완료", isPresented: $debugAlert) {
-            Button("확인") { }
-        } message: {
-            Text("ContentView가 정상적으로 로드되었습니다.\n\n디버그 로그:\n1. Xcode 콘솔 확인\n2. /tmp/xcode_console_fix.txt 참고\n3. Documents/pose_debug.txt 파일 확인\n\n오른쪽 하단에서 포즈 감지 상태를 실시간으로 확인할 수 있습니다.")
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet(
+                showGrid: $showGrid,
+                showFPS: $showFPS,
+                autoCapture: $autoCapture
+            )
         }
     }
 
