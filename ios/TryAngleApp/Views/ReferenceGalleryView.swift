@@ -89,6 +89,7 @@ struct ReferenceGalleryView: View {
                 }
             }
         }
+        }
     }
 }
 
