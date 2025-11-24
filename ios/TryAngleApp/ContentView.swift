@@ -157,9 +157,14 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            // 1. 카메라 프리뷰 (비율에 따라 캡처 영역 표시)
-            if cameraManager.isAuthorized {
+        GeometryReader { geometry in
+            let safeAreaTop = geometry.safeAreaInsets.top
+            let safeAreaBottom = geometry.safeAreaInsets.bottom
+            let screenHeight = geometry.size.height
+
+            ZStack {
+                // 1. 카메라 프리뷰 (비율에 따라 캡처 영역 표시)
+                if cameraManager.isAuthorized {
                 ZStack {
                     // 전체 화면 카메라 프리뷰
                     CameraView(cameraManager: cameraManager)
@@ -257,7 +262,7 @@ struct ContentView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 60)
+                .padding(.top, safeAreaTop + 10)
 
                 Spacer()
             }
@@ -278,9 +283,9 @@ struct ContentView: View {
 
             // 레퍼런스 선택 안내
             if referenceImage == nil {
-                VStack {
+                VStack(spacing: 0) {
                     Spacer()
-                        .frame(height: 200)
+                        .frame(height: safeAreaTop + screenHeight * 0.25)
 
                     Text("📸 레퍼런스 이미지를 선택하세요")
                         .font(.title3)
@@ -304,9 +309,9 @@ struct ContentView: View {
 
             // 완벽한 상태 표시 (레퍼런스가 있을 때만)
             else if referenceImage != nil && realtimeAnalyzer.isPerfect {
-                VStack {
+                VStack(spacing: 0) {
                     Spacer()
-                        .frame(height: 200)
+                        .frame(height: safeAreaTop + screenHeight * 0.25)
 
                     HStack {
                         Spacer()
@@ -376,7 +381,7 @@ struct ContentView: View {
                             )
                             .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
                             .padding(.leading, 20)
-                            .padding(.bottom, 160)
+                            .padding(.bottom, safeAreaBottom + 140)
 
                         Spacer()
                     }
@@ -441,10 +446,10 @@ struct ContentView: View {
                     }
                 }
                 .padding(.horizontal, 30)
-                .padding(.bottom, 50)
+                .padding(.bottom, max(safeAreaBottom, 20) + 30)
             }
 
-            // 4. 에러 메시지
+            // 에러 메시지
             if let error = errorMessage {
                 VStack {
                     Text("⚠️ \(error)")
@@ -453,13 +458,13 @@ struct ContentView: View {
                         .padding()
                         .background(Color.red.opacity(0.8))
                         .cornerRadius(8)
-                        .padding(.top, 100)
+                        .padding(.top, safeAreaTop + 80)
 
                     Spacer()
                 }
             }
 
-            // 5. 분석 중 인디케이터
+            // 분석 중 인디케이터
             if isAnalyzing {
                 VStack {
                     HStack {
@@ -472,7 +477,7 @@ struct ContentView: View {
                     .padding()
                     .background(Color.black.opacity(0.7))
                     .cornerRadius(8)
-                    .padding(.top, 100)
+                    .padding(.top, safeAreaTop + 80)
 
                     Spacer()
                 }
@@ -520,9 +525,10 @@ struct ContentView: View {
                             }
                         }
                         .padding(.trailing, 16)
-                        .padding(.bottom, 140)
+                        .padding(.bottom, safeAreaBottom + 120)
                     }
                 }
+            }
             }
         }
         .onChange(of: realtimeAnalyzer.isPerfect) { isPerfect in
