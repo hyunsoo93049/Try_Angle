@@ -44,6 +44,7 @@ struct GalleryView: View {
                 }
             }
         }
+        }
         .onAppear {
             loadPhotos()
         }
