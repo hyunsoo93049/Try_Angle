@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var showCaptureFlash = false
     @State private var selectedAspectRatio: CameraAspectRatio = .ratio4_3
     @State private var showSettings = false  // 설정 시트
+    @State private var showCameraOptions = false  // 카메라 옵션 펼침/접기
 
     // AI 분석은 레퍼런스 선택 시 자동 활성화
     private var analysisEnabled: Bool {
@@ -208,63 +209,93 @@ struct ContentView: View {
                     .ignoresSafeArea()
             }
 
-            // 3. 미니멀 상단바 (플래시, 비율, 설정만)
+            // 3. 접었다 펼칠 수 있는 상단바
             VStack {
-                HStack(spacing: 0) {
-                    // 왼쪽: 플래시
-                    Button(action: {
-                        cameraManager.toggleFlash()
-                    }) {
-                        Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(cameraManager.isFlashOn ? .yellow : .white)
-                            .frame(width: 40, height: 40)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
-                    .zIndex(1)
-
+                HStack {
                     Spacer()
 
-                    // 중앙: 비율 선택
-                    Menu {
-                        ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
+                    if showCameraOptions {
+                        // 펼쳐진 상태: 플래시, 비율, 설정, 닫기
+                        HStack(spacing: 12) {
+                            // 플래시
                             Button(action: {
-                                selectedAspectRatio = ratio
+                                cameraManager.toggleFlash()
                             }) {
-                                HStack {
-                                    Text(ratio.displayName)
-                                    if ratio == selectedAspectRatio {
-                                        Image(systemName: "checkmark")
+                                Image(systemName: cameraManager.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(cameraManager.isFlashOn ? .yellow : .white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                            }
+
+                            // 비율 선택
+                            Menu {
+                                ForEach(CameraAspectRatio.allCases, id: \.self) { ratio in
+                                    Button(action: {
+                                        selectedAspectRatio = ratio
+                                    }) {
+                                        HStack {
+                                            Text(ratio.displayName)
+                                            if ratio == selectedAspectRatio {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
                                     }
                                 }
+                            } label: {
+                                Text(selectedAspectRatio.displayName)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(20)
+                            }
+
+                            // 설정
+                            Button(action: {
+                                showSettings = true
+                            }) {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                            }
+
+                            // 닫기 버튼
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showCameraOptions = false
+                                }
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
                             }
                         }
-                    } label: {
-                        Text(selectedAspectRatio.displayName)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
-                            .cornerRadius(20)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    } else {
+                        // 접힌 상태: 옵션 버튼만
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCameraOptions = true
+                            }
+                        }) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                        }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
-                    .zIndex(2)
-
-                    Spacer()
-
-                    // 오른쪽: 설정
-                    Button(action: {
-                        showSettings = true
-                    }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
-                    .zIndex(3)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, safeAreaTop + 10)
