@@ -2,23 +2,44 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 1  // 0: 갤러리, 1: 카메라, 2: 레퍼런스
+    @State private var selectedReferenceImage: UIImage?  // 선택된 레퍼런스 이미지
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // 탭별 콘텐츠
-            Group {
+            // 탭별 콘텐츠 - ContentView는 항상 유지 (재생성 방지)
+            ZStack {
+                // 갤러리
                 if selectedTab == 0 {
                     GalleryView()
-                } else if selectedTab == 1 {
-                    ContentView()
-                } else {
-                    ReferenceGalleryView()
+                }
+
+                // 카메라 (항상 백그라운드에 유지)
+                ContentView(referenceImage: $selectedReferenceImage)
+                    .opacity(selectedTab == 1 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 1)
+
+                // 레퍼런스
+                if selectedTab == 2 {
+                    ReferenceGalleryViewSimple(
+                        selectedTab: $selectedTab,
+                        onSelectImage: { image in
+                            print("🟢 [MainTabView] onSelectImage 콜백 호출됨!")
+                            selectedReferenceImage = image
+                            print("🟢 [MainTabView] selectedReferenceImage 설정 완료")
+                            selectedTab = 1  // 카메라 탭으로 이동
+                            print("🟢 [MainTabView] 카메라 탭(1)으로 이동")
+                        }
+                    )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // 커스텀 하단 탭바
-            CustomTabBar(selectedTab: $selectedTab)
+            //레퍼런스 이미지 창에서는 하단 탭바 숨기기
+            if selectedTab != 2 {
+                 CustomTabBar(selectedTab: $selectedTab)
+             }
+
         }
         .ignoresSafeArea()
     }
@@ -30,48 +51,15 @@ struct CustomTabBar: View {
 
     var body: some View {
         ZStack {
-            // 배경
-            Rectangle()
-                .fill(Color.black.opacity(0.5))
-                .frame(height: 211)
-                .ignoresSafeArea(edges: .bottom)
-
             VStack(spacing: 0) {
                 Spacer()
 
-                // 셔터 버튼 (카메라 탭에서만 표시)
-                if selectedTab == 1 {
-                    HStack {
-                        Spacer()
+                // 경계선
+                Rectangle()
+                    .fill(Color.white.opacity(0.3))
+                    .frame(height: 1)
 
-                        // 셔터 버튼
-                        Circle()
-                            .strokeBorder(Color.white, lineWidth: 4)
-                            .frame(width: 82, height: 82)
-                            .overlay(
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 68, height: 68)
-                            )
-                            .padding(.bottom, 20)
-
-                        Spacer()
-
-                        // 카메라 전환 버튼
-                        Button(action: {}) {
-                            Image(systemName: "arrow.triangle.2.circlepath.camera")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                                .frame(width: 41, height: 41)
-                                .background(Color.gray.opacity(0.5))
-                                .clipShape(Circle())
-                        }
-                        .padding(.trailing, 51)
-                        .padding(.bottom, 40)
-                    }
-                }
-
-                // 탭 레이블
+                // 탭 레이블만 표시 (셔터/카메라 버튼은 ContentView에서 관리)
                 HStack(spacing: 77) {
                     TabButton(title: "갤러리", isSelected: selectedTab == 0) {
                         selectedTab = 0
@@ -88,7 +76,7 @@ struct CustomTabBar: View {
                 .padding(.bottom, 27)
             }
         }
-        .frame(height: 211)
+        .frame(height: 90)  // 탭 레이블만 표시하므로 높이 축소
     }
 }
 
@@ -107,30 +95,3 @@ struct TabButton: View {
     }
 }
 
-// MARK: - Hex Color Extension
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (1, 1, 1, 0)
-        }
-
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue:  Double(b) / 255,
-            opacity: Double(a) / 255
-        )
-    }
-}

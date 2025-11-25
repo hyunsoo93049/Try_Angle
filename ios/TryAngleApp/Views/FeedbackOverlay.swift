@@ -7,6 +7,12 @@ struct FeedbackOverlay: View {
     let processingTime: String
 
     var body: some View {
+        let _ = {
+            if !feedbackItems.isEmpty {
+                print("🖥️ FeedbackOverlay: \(feedbackItems.count)개 피드백 받음")
+            }
+        }()
+
         ZStack {
             // 왼쪽 중간: 카테고리 체크리스트
             if !categoryStatuses.isEmpty {

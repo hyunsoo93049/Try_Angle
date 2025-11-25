@@ -131,11 +131,27 @@ class DepthEstimator {
         }
 
         // Case 2: 실제 이동 필요
-        let steps = max(1, Int(round(abs(distDiff) / 0.7)))  // 0.7m per step
-        if distDiff > 0 {
-            return ("\(steps)걸음 앞으로 (현재 \(String(format: "%.1f", curDist))m)", false)
+        // 거리 범위 제한 (0.5m ~ 5m) - 비현실적인 값 방지
+        let clampedCurDist = max(0.5, min(5.0, curDist))
+        let clampedDiff = max(0.2, min(3.0, abs(distDiff)))  // 최대 3m 차이로 제한
+
+        // 거리에 따른 구체적인 안내
+        if clampedDiff < 0.5 {
+            // 작은 거리 차이 - cm 단위로 표시
+            let cm = Int(clampedDiff * 100)
+            if distDiff > 0 {
+                return ("약 \(cm)cm 앞으로 이동하세요", false)
+            } else {
+                return ("약 \(cm)cm 뒤로 이동하세요", false)
+            }
         } else {
-            return ("\(steps)걸음 뒤로 (현재 \(String(format: "%.1f", curDist))m)", false)
+            // 큰 거리 차이 - 걸음 수로 표시
+            let steps = max(1, Int(round(clampedDiff / 0.7)))  // 0.7m per step
+            if distDiff > 0 {
+                return ("\(steps)걸음 앞으로 이동하세요", false)
+            } else {
+                return ("\(steps)걸음 뒤로 이동하세요", false)
+            }
         }
     }
 

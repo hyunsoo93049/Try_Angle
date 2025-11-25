@@ -1,4 +1,13 @@
 import Foundation
+import CoreGraphics
+
+// MARK: - Pose Keypoint
+
+/// 포즈 키포인트 (위치 + 신뢰도)
+struct PoseKeypoint {
+    let location: CGPoint
+    let confidence: Float
+}
 
 // MARK: - Camera Aspect Ratio
 

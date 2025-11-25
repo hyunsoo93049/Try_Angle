@@ -225,12 +225,24 @@ class FeedbackGenerator {
         // current < target: 인물이 왼쪽에 있음 → 오른쪽으로 이동
         //
         // ⚠️ 중요: Vision 좌표는 카메라 센서 기준이므로 전면/후면 동일!
+        let diff = abs(current - target)
         let direction = current > target ? "왼쪽" : "오른쪽"
+
+        // 차이에 따라 구체적인 안내 (화면 비율 기반)
+        let message: String
+
+        if diff > 0.3 {
+            message = "\(direction)으로 많이 이동하세요"
+        } else if diff > 0.15 {
+            message = "\(direction)으로 조금 이동하세요"
+        } else {
+            message = "\(direction)으로 살짝 이동하세요"
+        }
 
         return FeedbackItem(
             priority: gap.priority,
             icon: "↔️",
-            message: "\(direction)으로 서주세요",
+            message: message,
             category: "position_x",
             currentValue: current,
             targetValue: target,
@@ -260,12 +272,26 @@ class FeedbackGenerator {
         //   → 인물을 아래로 내리려면 카메라를 위로 올려야 함
         // current < target: 인물이 화면 아래쪽에 있음
         //   → 인물을 위로 올리려면 카메라를 아래로 내려야 함
-        // 🔥 수정: 반대로 되어 있던 것을 바로잡음
+        let diff = abs(current - target)
         let cameraDirection = current > target ? "위로" : "아래로"
+
+        // 차이에 따라 구체적인 거리 제시
+        // 화면 기준 비율로 설명 (더 직관적)
+        let percentage = Int(diff * 100)
+        let message: String
+
+        if percentage > 30 {
+            message = "카메라를 \(cameraDirection) 많이 이동하세요"
+        } else if percentage > 15 {
+            message = "카메라를 \(cameraDirection) 조금 이동하세요"
+        } else {
+            message = "카메라를 \(cameraDirection) 살짝 이동하세요"
+        }
+
         return FeedbackItem(
             priority: gap.priority,
             icon: "📷",
-            message: "카메라를 \(cameraDirection) 이동하세요",
+            message: message,
             category: "position_y",
             currentValue: current,
             targetValue: target,
@@ -306,11 +332,23 @@ class FeedbackGenerator {
         // atan2로 계산된 각도: 양수=반시계(왼쪽), 음수=시계(오른쪽)
         // current > target: 더 반시계 방향 → 시계 방향(오른쪽)으로 기울여야 함
         // current < target: 더 시계 방향 → 반시계 방향(왼쪽)으로 기울여야 함
+        let diff = abs(current - target)
         let direction = current > target ? "오른쪽" : "왼쪽"
+        let angle = Int(diff)
+
+        let message: String
+        if angle > 5 {
+            message = "카메라를 \(direction)으로 \(angle)도 크게 기울이세요"
+        } else if angle > 2 {
+            message = "카메라를 \(direction)으로 \(angle)도 기울이세요"
+        } else {
+            message = "카메라를 \(direction)으로 약간만 기울이세요 (\(angle)도)"
+        }
+
         return FeedbackItem(
             priority: gap.priority,
             icon: "📐",
-            message: "카메라를 \(direction)으로 기울여주세요",
+            message: message,
             category: "tilt",
             currentValue: current,
             targetValue: target,
