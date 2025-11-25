@@ -125,28 +125,13 @@ class PoseMLAnalyzer {
             return nil
         }
 
-        // RTMPose 키포인트를 PoseAnalysisResult 형식으로 변환
-        // RTMPose는 133개 키포인트 제공 (전신 + 얼굴 + 손 + 발)
-        // 기존 PoseAnalysisResult 형식으로 변환 (17개 주요 키포인트)
+        // 🔥 RTMPose 133개 키포인트를 전체 사용
+        // RTMPose는 133개 키포인트 제공 (전신 17 + 얼굴 68 + 손 42 + 발 6)
+        // 더 정밀한 포즈 비교를 위해 전체 키포인트 사용
 
-        // COCO 17 keypoints 매핑
-        // 0: nose, 1-2: eyes, 3-4: ears, 5-6: shoulders, 7-8: elbows,
-        // 9-10: wrists, 11-12: hips, 13-14: knees, 15-16: ankles
+        print("✅ RTMPose: \(rtmResult.keypoints.count)개 키포인트 검출")
 
-        // RTMPose 133 키포인트 중 COCO 호환 인덱스 추출
-        let cocoIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-        var keypoints: [(point: CGPoint, confidence: Float)] = []
-
-        for idx in cocoIndices {
-            if idx < rtmResult.keypoints.count {
-                let kp = rtmResult.keypoints[idx]
-                keypoints.append((point: kp.point, confidence: kp.confidence))
-            } else {
-                keypoints.append((point: CGPoint.zero, confidence: 0.0))
-            }
-        }
-
-        return PoseAnalysisResult(keypoints: keypoints)
+        return PoseAnalysisResult(keypoints: rtmResult.keypoints)
     }
 
     /// 밝기 계산 (VisionAnalyzer와 호환)

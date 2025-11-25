@@ -65,25 +65,45 @@ class RTMPoseRunner {
             env = try ORTEnv(loggingLevel: ORTLoggingLevel.warning)
             print("✅ Environment 생성 성공")
 
-            // 2. Session Options 설정
-            let sessionOptions = try ORTSessionOptions()
+            // 2. YOLOX용 Session Options (CoreML GPU 가속)
+            let detectorOptions = try ORTSessionOptions()
 
-            // CoreML은 모델 호환성 문제로 비활성화 - CPU만 사용
-            // ReduceMax 연산자 및 큰 텐서 크기 미지원
-            print("⚠️ CoreML 비활성화 - CPU 실행 모드")
+            // 🔥 YOLOX도 CoreML GPU 가속 활성화
+            do {
+                try detectorOptions.appendCoreMLExecutionProvider()
+                print("✅ YOLOX: CoreML GPU 가속 활성화")
+            } catch {
+                print("⚠️ YOLOX CoreML 활성화 실패, CPU 폴백: \(error)")
+            }
 
-            // 병렬 처리 설정
-            try sessionOptions.setIntraOpNumThreads(4)
-            print("✅ 병렬 처리 설정 완료")
+            try detectorOptions.setIntraOpNumThreads(6)  // 병렬 처리
+            try detectorOptions.setGraphOptimizationLevel(.all)
 
-            // 3. 세션 생성
+            // 3. RTMPose용 Session Options (CoreML GPU 가속)
+            let poseOptions = try ORTSessionOptions()
+
+            // 🔥 CoreML Execution Provider 활성화 (GPU 가속)
+            do {
+                try poseOptions.appendCoreMLExecutionProvider()
+                print("✅ RTMPose: CoreML GPU 가속 활성화")
+            } catch {
+                print("⚠️ RTMPose CoreML 활성화 실패, CPU 폴백: \(error)")
+            }
+
+            // 병렬 처리 설정 (최대 성능)
+            try poseOptions.setIntraOpNumThreads(6)  // 🔥 스레드 6개로 증가
+            try poseOptions.setGraphOptimizationLevel(.all)
+
+            print("✅ 최대 성능 최적화 설정 완료 (YOLOX: CoreML GPU, RTMPose: CoreML GPU)")
+
+            // 4. 세션 생성
             print("📦 Detector 모델 로딩 중... (\(detectorModelPath))")
-            detectorSession = try ORTSession(env: env!, modelPath: detectorModelPath, sessionOptions: sessionOptions)
-            print("✅ YOLOX Detector 로드 성공")
+            detectorSession = try ORTSession(env: env!, modelPath: detectorModelPath, sessionOptions: detectorOptions)
+            print("✅ YOLOX Detector 로드 성공 (CoreML GPU)")
 
             print("📦 Pose 모델 로딩 중... (\(poseModelPath))")
-            poseSession = try ORTSession(env: env!, modelPath: poseModelPath, sessionOptions: sessionOptions)
-            print("✅ RTMPose 로드 성공")
+            poseSession = try ORTSession(env: env!, modelPath: poseModelPath, sessionOptions: poseOptions)
+            print("✅ RTMPose 로드 성공 (CoreML GPU)")
 
             print("🔧 ONNX Runtime 초기화 완료")
 
@@ -236,8 +256,9 @@ class RTMPoseRunner {
     }
 
     private func cropImage(_ cgImage: CGImage, rect: CGRect) -> CGImage? {
-        // 바운딩 박스를 약간 확장 (패딩 추가)
-        let padding: CGFloat = 0.2
+        // 바운딩 박스를 충분히 확장 (손이 포함되도록 패딩 증가)
+        // 🔥 손 인식 개선: 패딩을 0.2에서 0.4로 증가
+        let padding: CGFloat = 0.4  // 40% 패딩으로 손까지 포함
         let expandedRect = CGRect(
             x: rect.minX - rect.width * padding,
             y: rect.minY - rect.height * padding,
@@ -407,6 +428,31 @@ class RTMPoseRunner {
             let confidence = (maxXVal + maxYVal) / 2.0
 
             keypoints.append((point: point, confidence: confidence))
+
+            // 🔍 손 키포인트 디버그 (91-132번)
+            if i >= 91 && i <= 132 {
+                if confidence < 0.3 {
+                    let handName = i <= 111 ? "왼손" : "오른손"
+                    let keypointIndex = i <= 111 ? i - 91 : i - 112
+                    if keypointIndex % 5 == 0 {  // 5개마다 한 번만 로그
+                        print("⚠️ \(handName) 키포인트 \(keypointIndex): 신뢰도 낮음 (\(String(format: "%.2f", confidence)))")
+                    }
+                }
+            }
+        }
+
+        // 손 키포인트 요약 통계
+        let leftHandConfidences = (91...111).compactMap { keypoints[$0].confidence }
+        let rightHandConfidences = (112...132).compactMap { keypoints[$0].confidence }
+
+        let leftHandAvg = leftHandConfidences.reduce(0, +) / Float(leftHandConfidences.count)
+        let rightHandAvg = rightHandConfidences.reduce(0, +) / Float(rightHandConfidences.count)
+
+        if leftHandAvg < 0.5 || rightHandAvg < 0.5 {
+            print("📊 손 인식 평균 신뢰도 - 왼손: \(String(format: "%.2f", leftHandAvg)), 오른손: \(String(format: "%.2f", rightHandAvg))")
+            if leftHandAvg < 0.3 || rightHandAvg < 0.3 {
+                print("💡 손이 화면에서 잘렸거나 가려졌을 수 있습니다. 전체 신체가 프레임 안에 들어오도록 조정해보세요.")
+            }
         }
 
         return keypoints

@@ -19,7 +19,10 @@
 		6CD9B7D02ECD595F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CE40FEB2ECD68E0003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CE410442ECD72FA003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
-		6CE416DC2ED40153003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CE4120C2ECF58F4003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CE414362ECF8483003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CE414922ECF8502003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6CE41A482ED59BB0003DE68C /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB453F2EC9E4BF00809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CEB46312ECC964900809755 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
@@ -106,7 +109,22 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		6CE416E12ED40153003DE68C /* Products */ = {
+		6CE412102ECF58F4003DE68C /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CE4143A2ECF8483003DE68C /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CE414962ECF8502003DE68C /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6CE41A4C2ED59BB0003DE68C /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -195,8 +213,20 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
+					ProductGroup = 6CE412102ECF58F4003DE68C /* Products */;
+					ProjectRef = 6CE4120C2ECF58F4003DE68C /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CE414962ECF8502003DE68C /* Products */;
+					ProjectRef = 6CE414922ECF8502003DE68C /* TryAngleApp.xcodeproj */;
+				},
+				{
 					ProductGroup = 6CEB46322ECC964900809755 /* Products */;
 					ProjectRef = 6CEB46312ECC964900809755 /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6CE41A4C2ED59BB0003DE68C /* Products */;
+					ProjectRef = 6CE41A482ED59BB0003DE68C /* TryAngleApp.xcodeproj */;
 				},
 				{
 					ProductGroup = 6CD9B77C2ECD559F00CC618D /* Products */;
@@ -219,8 +249,8 @@
 					ProjectRef = 6CEB45F42ECC7B8900809755 /* TryAngleApp.xcodeproj */;
 				},
 				{
-					ProductGroup = 6CE416E12ED40153003DE68C /* Products */;
-					ProjectRef = 6CE416DC2ED40153003DE68C /* TryAngleApp.xcodeproj */;
+					ProductGroup = 6CE4143A2ECF8483003DE68C /* Products */;
+					ProjectRef = 6CE414362ECF8483003DE68C /* TryAngleApp.xcodeproj */;
 				},
 				{
 					ProductGroup = 6CD9B7222ECCB1AF00CC618D /* Products */;

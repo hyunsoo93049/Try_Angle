@@ -50,13 +50,13 @@ class RealtimeAnalyzer: ObservableObject {
     // 🐛 ContentView에서 접근 가능하도록 internal로 변경
     var referenceAnalysis: FrameAnalysis?
     private var lastAnalysisTime = Date()
-    private let analysisInterval: TimeInterval = 0.1  // 100ms마다 분석
+    private let analysisInterval: TimeInterval = 0.05  // 50ms마다 분석 - 반응속도 개선
 
     // 히스테리시스를 위한 상태 추적
     private var feedbackHistory: [String: Int] = [:]  // 카테고리별 연속 감지 횟수
-    private let historyThreshold = 10  // 🔄 10번 연속 감지되어야 표시 (약 1초)
+    private let historyThreshold = 3  // 🔄 3번 연속 감지되어야 표시 (약 0.3초) - 반응속도 개선
     private var perfectFrameCount = 0  // 완벽한 프레임 연속 횟수
-    private let perfectThreshold = 10  // 10프레임(약 1초) 연속 완벽해야 감지
+    private let perfectThreshold = 5  // 5프레임(약 0.5초) 연속 완벽해야 감지 - 반응속도 개선
 
     // 🆕 고정 피드백 (한 번 표시되면 해결될 때까지 유지)
     private var stickyFeedbacks: [String: FeedbackItem] = [:]  // 카테고리별 고정 피드백
@@ -65,7 +65,7 @@ class RealtimeAnalyzer: ObservableObject {
     private var previousFeedbackIds = Set<String>()
     // 🆕 완료 감지를 위한 히스테리시스
     private var disappearedFeedbackHistory: [String: Int] = [:]  // 사라진 피드백의 연속 횟수
-    private let disappearedThreshold = 5  // 5번 연속 사라져야 완료로 판단
+    private let disappearedThreshold = 2  // 2번 연속 사라져야 완료로 판단 - 반응속도 개선
 
     // 🆕 고정 피드백 카테고리 (포즈 관련은 계속 표시)
     // pose_missing_parts는 이제 레퍼런스 기반으로 제대로 감지되므로 sticky 처리
@@ -77,7 +77,7 @@ class RealtimeAnalyzer: ObservableObject {
         "pose_missing_parts"
     ]
 
-    // 🆕 V1 분석기들 (YOLO + MoveNet으로 업그레이드)
+    // 🔥 RTMPose 분석기 (ONNX Runtime with CoreML EP)
     private lazy var poseMLAnalyzer: PoseMLAnalyzer = {
         print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 초기화 시작")
         let analyzer = PoseMLAnalyzer()
@@ -146,7 +146,7 @@ class RealtimeAnalyzer: ObservableObject {
         print("🎯 레퍼런스 이미지 크기: \(cgImage.width) x \(cgImage.height)")
         print("🎯 레퍼런스 이미지 orientation: \(image.imageOrientation.rawValue)")
 
-        // 🆕 PoseMLAnalyzer로 얼굴+포즈 동시 분석 (YOLO + MoveNet)
+        // 🔥 RTMPose로 얼굴+포즈 동시 분석 (ONNX Runtime with CoreML EP)
         print("🎯 PoseMLAnalyzer.analyzeFaceAndPose() 호출 중...")
         let (faceResult, poseResult) = poseMLAnalyzer.analyzeFaceAndPose(from: image)
         print("🎯 분석 완료:")
@@ -278,25 +278,24 @@ class RealtimeAnalyzer: ObservableObject {
         guard let cgImage = image.cgImage else { return }
         lastAnalysisTime = Date()
 
-        // 🆕 PoseMLAnalyzer로 분석 (YOLO + MoveNet)
+        // 🔥 메인 쓰레드에서 동기 실행 (GPU 접근 보장 + 프레임 스키핑 제거)
+        // RTMPose로 분석 (ONNX Runtime with CoreML EP) - 메인 쓰레드에서 실행
         let (faceResult, poseResult) = poseMLAnalyzer.analyzeFaceAndPose(from: image)
 
         // 얼굴이 감지되지 않으면 완성도 0으로 설정
         guard faceResult != nil else {
-            DispatchQueue.main.async {
-                self.instantFeedback = [FeedbackItem(
-                    priority: 1,
-                    icon: "👤",
-                    message: "얼굴을 화면에 보여주세요",
-                    category: "no_face",
-                    currentValue: nil,
-                    targetValue: nil,
-                    tolerance: nil,
-                    unit: nil
-                )]
-                self.perfectScore = 0.0
-                self.isPerfect = false
-            }
+            self.instantFeedback = [FeedbackItem(
+                priority: 1,
+                icon: "👤",
+                message: "얼굴을 화면에 보여주세요",
+                category: "no_face",
+                currentValue: nil,
+                targetValue: nil,
+                tolerance: nil,
+                unit: nil
+            )]
+            self.perfectScore = 0.0
+            self.isPerfect = false
             return
         }
 
@@ -507,11 +506,9 @@ class RealtimeAnalyzer: ObservableObject {
 
             // 5번 연속 사라지면 완료로 판단
             if disappearedFeedbackHistory[disappearedId]! >= disappearedThreshold {
-                if let completedItem = self.instantFeedback.first(where: { $0.id == disappearedId }) {
+                if let completedItem = instantFeedback.first(where: { $0.id == disappearedId }) {
                     let completed = CompletedFeedback(item: completedItem, completedAt: Date())
-                    DispatchQueue.main.async {
-                        self.completedFeedbacks.append(completed)
-                    }
+                    completedFeedbacks.append(completed)
                 }
                 // 완료 처리 후 히스토리 초기화
                 disappearedFeedbackHistory[disappearedId] = 0
@@ -526,9 +523,7 @@ class RealtimeAnalyzer: ObservableObject {
         }
 
         // 2초 지난 완료 피드백 제거
-        DispatchQueue.main.async {
-            self.completedFeedbacks.removeAll { !$0.shouldDisplay }
-        }
+        completedFeedbacks.removeAll { !$0.shouldDisplay }
 
         // 이전 피드백 업데이트
         previousFeedbackIds = currentFeedbackIds
@@ -536,13 +531,11 @@ class RealtimeAnalyzer: ObservableObject {
         // 🆕 카테고리별 상태 계산
         let categoryStatuses = calculateCategoryStatuses(from: stableFeedback)
 
-        // 즉시 피드백 업데이트
-        DispatchQueue.main.async {
-            self.instantFeedback = stableFeedback
-            self.perfectScore = score
-            self.isPerfect = self.perfectFrameCount >= self.perfectThreshold
-            self.categoryStatuses = categoryStatuses
-        }
+        // 즉시 피드백 업데이트 (메인 쓰레드에서 직접 실행 중이므로 async 불필요)
+        self.instantFeedback = stableFeedback
+        self.perfectScore = score
+        self.isPerfect = perfectFrameCount >= perfectThreshold
+        self.categoryStatuses = categoryStatuses
     }
 
     // MARK: - Category Status Calculation

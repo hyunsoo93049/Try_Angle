@@ -1,69 +1,57 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 struct GalleryView: View {
-    @State private var photos: [PHAsset] = []
-    @State private var selectedPhoto: PHAsset?
+    @State private var showPhotoPicker = false
 
     var body: some View {
-        GeometryReader { geometry in
-            let safeAreaTop = geometry.safeAreaInsets.top
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-            ZStack {
-                Color.black.ignoresSafeArea()
+            VStack {
+                Text("갤러리")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.top, 50)
 
-                VStack(spacing: 0) {
-                    // 상단 바
-                    HStack {
-                        Text("갤러리")
-                            .font(.system(size: 20, weight: .bold))
+                Spacer()
+
+                Button(action: {
+                    showPhotoPicker = true
+                }) {
+                    VStack(spacing: 20) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 60))
                             .foregroundColor(.white)
 
-                        Spacer()
+                        Text("사진 보기")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, max(safeAreaTop, 10) + 10)
-                    .padding(.bottom, 10)
-
-                // 사진 그리드
-                ScrollView {
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 1),
-                        GridItem(.flexible(), spacing: 1),
-                        GridItem(.flexible(), spacing: 1)
-                    ], spacing: 1) {
-                        ForEach(photos, id: \.localIdentifier) { asset in
-                            GalleryPhotoItem(asset: asset)
-                                .aspectRatio(1, contentMode: .fill)
-                                .onTapGesture {
-                                    selectedPhoto = asset
-                                }
-                        }
-                    }
-                    .padding(.bottom, 220) // 하단 탭바 공간 확보
                 }
+
+                Spacer()
             }
         }
-        }
-        .onAppear {
-            loadPhotos()
+        .sheet(isPresented: $showPhotoPicker) {
+            PhotoPickerView()
         }
     }
+}
 
-    // 사진 앨범에서 사진 불러오기
-    private func loadPhotos() {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+// MARK: - 포토피커 뷰
+struct PhotoPickerView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = 0  // 무제한 선택
+        config.filter = .images
 
-        let fetchResult = PHAsset.fetchAssets(with: .image, options: fetchOptions)
-        var loadedPhotos: [PHAsset] = []
-
-        fetchResult.enumerateObjects { asset, _, _ in
-            loadedPhotos.append(asset)
-        }
-
-        photos = loadedPhotos
+        let picker = PHPickerViewController(configuration: config)
+        return picker
     }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
 }
 
 // MARK: - 갤러리 사진 아이템

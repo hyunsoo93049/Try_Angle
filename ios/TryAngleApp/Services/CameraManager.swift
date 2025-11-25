@@ -1,6 +1,8 @@
 import AVFoundation
 import UIKit
 import Combine
+import Metal
+import CoreImage
 
 class CameraManager: NSObject, ObservableObject {
     // MARK: - Published Properties
@@ -18,6 +20,28 @@ class CameraManager: NSObject, ObservableObject {
     private var videoOutput = AVCaptureVideoDataOutput()
     private var currentCamera: AVCaptureDevice?
     private var currentInput: AVCaptureDeviceInput?
+
+    // MARK: - Performance Optimization
+    private let ciContext: CIContext = {
+        // 🔥 Metal GPU 가속 사용
+        if let metalDevice = MTLCreateSystemDefaultDevice() {
+            return CIContext(mtlDevice: metalDevice, options: [
+                .workingColorSpace: NSNull(),  // 컬러 변환 스킵
+                .outputColorSpace: NSNull(),   // 출력 컬러 변환 스킵
+                .cacheIntermediates: false     // 메모리 절약
+            ])
+        } else {
+            // Metal 없으면 CPU 폴백
+            return CIContext(options: [
+                .useSoftwareRenderer: false,
+                .workingColorSpace: NSNull(),
+                .outputColorSpace: NSNull()
+            ])
+        }
+    }()
+
+    // 🔥 중복 버퍼 방지
+    private var lastBufferTime: TimeInterval = 0
 
     // MARK: - Settings
     private var currentISO: Float?
@@ -85,8 +109,9 @@ class CameraManager: NSObject, ObservableObject {
                 currentInput = input
             }
 
-            // 비디오 출력 설정
-            videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "videoQueue"))
+            // 비디오 출력 설정 (🔥 최고 우선순위 큐로 최적화)
+            let videoQueue = DispatchQueue(label: "videoQueue", qos: .userInteractive, attributes: [])
+            videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
             videoOutput.videoSettings = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
             ]
@@ -331,11 +356,16 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     ) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // CVPixelBuffer → UIImage 변환
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
+        // 🔥 타임스탬프 체크로 중복 버퍼 방지
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        if timestamp == lastBufferTime { return }
+        lastBufferTime = timestamp
 
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
+        // CVPixelBuffer → UIImage 변환 (최적화된 방식)
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+
+        // 재사용 가능한 ciContext 사용
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
 
         // 디바이스 방향에 따라 적절한 orientation 설정
         let deviceOrientation = UIDevice.current.orientation
