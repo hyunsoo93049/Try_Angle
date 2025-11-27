@@ -104,8 +104,8 @@ enum FeedbackCategory: String, Codable, CaseIterable {
             return .position
         }
 
-        // 프레이밍 관련 (거리/줌/비율/여백)
-        if categoryString == "distance" || categoryString == "aspect_ratio" || categoryString == "padding" || categoryString == "framing" || categoryString == "aspect_ratio_mismatch" {
+        // 프레이밍 관련 (거리/줌/비율/여백/사진학 프레이밍)
+        if categoryString == "distance" || categoryString == "aspect_ratio" || categoryString == "padding" || categoryString == "framing" || categoryString == "photography_framing" {
             return .framing
         }
 

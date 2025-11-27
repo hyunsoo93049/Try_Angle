@@ -486,6 +486,40 @@ struct ContentView: View {
             VStack {
                 Spacer()
 
+                // 🆕 렌즈 선택 버튼 (0.5x, 1x, 2x) - 셔터 버튼 위
+                if !cameraManager.isFrontCamera && cameraManager.availableLenses.count > 1 {
+                    HStack(spacing: 8) {
+                        ForEach(cameraManager.availableLenses, id: \.self) { lens in
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    cameraManager.switchLens(to: lens)
+                                }
+                            }) {
+                                // 현재 렌즈면 실제 가상 줌 값 표시, 아니면 렌즈 기본값 표시
+                                let displayZoom = cameraManager.currentLens == lens ?
+                                    String(format: "%.1f", cameraManager.virtualZoom) :
+                                    lens.rawValue
+                                Text(displayZoom + "x")
+                                    .font(.system(size: 13, weight: cameraManager.currentLens == lens ? .bold : .medium))
+                                    .foregroundColor(cameraManager.currentLens == lens ? .yellow : .white)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(cameraManager.currentLens == lens ?
+                                                  Color.black.opacity(0.6) : Color.black.opacity(0.3))
+                                    )
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.3))
+                    )
+                    .padding(.bottom, 16)
+                }
+
                 ZStack {
                     // 셔터 버튼 (정중앙)
                     Button(action: {
@@ -645,7 +679,11 @@ struct ContentView: View {
 
             // 비율 변경시 즉시 프레임 재분석하여 피드백 갱신
             if let currentFrame = cameraManager.currentFrame {
-                realtimeAnalyzer.analyzeFrame(currentFrame, isFrontCamera: cameraManager.isFrontCamera)
+                realtimeAnalyzer.analyzeFrame(
+                    currentFrame,
+                    isFrontCamera: cameraManager.isFrontCamera,
+                    currentAspectRatio: cameraManager.aspectRatio
+                )
             }
         }
         .onChange(of: referenceImage) { newImage in
@@ -705,7 +743,8 @@ struct ContentView: View {
                 }
                 self.realtimeAnalyzer.analyzeFrame(
                     currentFrame,
-                    isFrontCamera: self.cameraManager.isFrontCamera
+                    isFrontCamera: self.cameraManager.isFrontCamera,
+                    currentAspectRatio: self.cameraManager.aspectRatio
                 )
             }
         }

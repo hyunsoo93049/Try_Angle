@@ -1,11 +1,27 @@
 import SwiftUI
+import PhotosUI
 
 struct ReferenceGalleryView: View {
     @Binding var selectedTab: Int  // 탭 전환을 위한 바인딩
     @State private var selectedCategoryIndex = 1  // Hot부터 시작 (index 1)
     @State private var searchText = ""
-    @State private var mySavedPhotos: [String] = []  // My 테마 저장된 사진들
+    @State private var mySavedPhotos: [SavedPhoto] = []  // My 테마 저장된 사진들
+    @State private var showingImagePicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
     @Environment(\.presentationMode) var presentationMode
+
+    // 저장된 사진 모델
+    struct SavedPhoto: Identifiable, Codable {
+        let id: UUID
+        let fileName: String
+        let dateAdded: Date
+
+        init(fileName: String) {
+            self.id = UUID()
+            self.fileName = fileName
+            self.dateAdded = Date()
+        }
+    }
 
     let categories = ["My", "Hot", "Cafe☕️", "Winter ☃️", "Street 🚶‍♂️", "랜드마크🗽"]
 
@@ -47,7 +63,7 @@ struct ReferenceGalleryView: View {
                 "Landmark/landmark9.jpg"
             ]
         case "My":
-            return mySavedPhotos
+            return []  // My 탭은 별도로 처리
         default:
             return []
         }
@@ -142,36 +158,28 @@ struct ReferenceGalleryView: View {
                     ForEach(Array(categories.enumerated()), id: \.offset) { index, category in
                         Group {
                             if index == 0 {
-                                // My 테마 - 저장된 사진 여부에 따라 분기
-                                if mySavedPhotos.isEmpty {
-                                    // 사진이 없을 때 안내 메시지
-                                    VStack {
-                                        Spacer()
-
-                                        Text("아직 저장한 사진이 없어요\n\n마음에 드는 사진을 골라주세요")
-                                            .font(.system(size: 20, weight: .medium))
-                                            .multilineTextAlignment(.center)
-                                            .foregroundColor(.black)
-
-                                        Spacer()
-                                    }
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .background(Color.white)
-                                } else {
-                                    // 저장된 사진이 있을 때 그리드
-                                    ScrollView {
-                                        LazyVGrid(columns: [
-                                            GridItem(.flexible(), spacing: 5),
-                                            GridItem(.flexible(), spacing: 5)
-                                        ], spacing: 15) {
-                                            ForEach(mySavedPhotos, id: \.self) { photoName in
-                                                PhotoCard(imageName: photoName)
-                                            }
+                                // My 테마 - 항상 + 버튼 카드를 첫 번째로 표시
+                                ScrollView {
+                                    LazyVGrid(columns: [
+                                        GridItem(.flexible(), spacing: 5),
+                                        GridItem(.flexible(), spacing: 5)
+                                    ], spacing: 15) {
+                                        // + 버튼 카드 (항상 첫 번째)
+                                        AddPhotoCard {
+                                            showingImagePicker = true
                                         }
-                                        .padding(.horizontal, 10)
-                                        .padding(.top, 10)
-                                        .padding(.bottom, 90)
+
+                                        // 저장된 사진들
+                                        ForEach(mySavedPhotos) { photo in
+                                            MyPhotoCard(
+                                                photo: photo,
+                                                onDelete: { deletePhoto(photo) }
+                                            )
+                                        }
                                     }
+                                    .padding(.horizontal, 10)
+                                    .padding(.top, 10)
+                                    .padding(.bottom, 90)
                                 }
                             } else {
                                 // 다른 테마는 실제 이미지 표시
@@ -198,6 +206,84 @@ struct ReferenceGalleryView: View {
                 .padding(.top, safeAreaTop + 5)  // 포토카드랑 검색창 사이 여백
             }
         }
+        .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
+        .onChange(of: selectedPhotoItem) { newItem in
+            Task {
+                if let newItem = newItem {
+                    await loadAndSavePhoto(from: newItem)
+                }
+            }
+        }
+        .onAppear {
+            loadSavedPhotos()
+        }
+    }
+
+    // MARK: - 사진 저장/로드 함수
+
+    /// 선택한 사진을 앱 저장소에 저장
+    private func loadAndSavePhoto(from item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            print("❌ 이미지 로드 실패")
+            return
+        }
+
+        // 파일명 생성 (UUID 기반)
+        let fileName = "my_\(UUID().uuidString).jpg"
+
+        // Documents 디렉토리에 저장
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsURL.appendingPathComponent(fileName)
+
+            // JPEG로 압축하여 저장
+            if let jpegData = image.jpegData(compressionQuality: 0.8) {
+                do {
+                    try jpegData.write(to: fileURL)
+                    print("✅ 사진 저장 완료: \(fileName)")
+
+                    // 목록에 추가
+                    DispatchQueue.main.async {
+                        let newPhoto = SavedPhoto(fileName: fileName)
+                        mySavedPhotos.insert(newPhoto, at: 0)  // 맨 앞에 추가
+                        saveSavedPhotosList()
+                    }
+                } catch {
+                    print("❌ 사진 저장 실패: \(error)")
+                }
+            }
+        }
+
+        // 선택 초기화
+        selectedPhotoItem = nil
+    }
+
+    /// 사진 삭제
+    private func deletePhoto(_ photo: SavedPhoto) {
+        // 파일 삭제
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsURL.appendingPathComponent(photo.fileName)
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        // 목록에서 제거
+        mySavedPhotos.removeAll { $0.id == photo.id }
+        saveSavedPhotosList()
+    }
+
+    /// 저장된 사진 목록 불러오기
+    private func loadSavedPhotos() {
+        if let data = UserDefaults.standard.data(forKey: "mySavedPhotos"),
+           let photos = try? JSONDecoder().decode([SavedPhoto].self, from: data) {
+            mySavedPhotos = photos
+        }
+    }
+
+    /// 저장된 사진 목록 저장
+    private func saveSavedPhotosList() {
+        if let data = try? JSONEncoder().encode(mySavedPhotos) {
+            UserDefaults.standard.set(data, forKey: "mySavedPhotos")
+        }
     }
 }
 
@@ -221,6 +307,109 @@ struct CategoryTab: View {
                 Rectangle()
                     .fill(isSelected ? Color(hex: "#555555") : Color.clear)
                     .frame(height: 4)
+            }
+        }
+    }
+}
+
+// MARK: - + 버튼 카드 (사진 추가)
+struct AddPhotoCard: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                // + 버튼 영역
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#f5f5f5"))
+                    .frame(width: 184, height: 184)
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 40, weight: .light))
+                                .foregroundColor(Color(hex: "#888888"))
+
+                            Text("직접 추가하기")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(hex: "#888888"))
+                        }
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
+                            .foregroundColor(Color(hex: "#cccccc"))
+                    )
+
+                // 하트 버튼 자리 (빈 공간으로 다른 카드와 높이 맞춤)
+                Color.clear
+                    .frame(height: 18)
+                    .padding(.trailing, 8)
+            }
+        }
+    }
+}
+
+// MARK: - My 사진 카드 (사용자가 추가한 사진)
+struct MyPhotoCard: View {
+    let photo: ReferenceGalleryView.SavedPhoto
+    let onDelete: () -> Void
+    @State private var uiImage: UIImage?
+    @State private var showDeleteConfirm = false
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 15) {
+            // 이미지
+            ZStack(alignment: .topTrailing) {
+                if let uiImage = uiImage {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 184, height: 184)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    // 로딩 중
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 184, height: 184)
+                        .overlay(
+                            ProgressView()
+                        )
+                }
+
+                // 삭제 버튼
+                Button(action: { showDeleteConfirm = true }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white)
+                        .shadow(radius: 2)
+                }
+                .padding(8)
+            }
+
+            // 하트 버튼 (My 사진은 이미 저장된 것이므로 채워진 하트)
+            Image(systemName: "heart.fill")
+                .font(.system(size: 18))
+                .foregroundColor(.red)
+                .padding(.trailing, 8)
+        }
+        .onAppear {
+            loadImage()
+        }
+        .alert("사진 삭제", isPresented: $showDeleteConfirm) {
+            Button("취소", role: .cancel) { }
+            Button("삭제", role: .destructive) {
+                onDelete()
+            }
+        } message: {
+            Text("이 사진을 삭제하시겠습니까?")
+        }
+    }
+
+    private func loadImage() {
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsURL.appendingPathComponent(photo.fileName)
+            if let image = UIImage(contentsOfFile: fileURL.path) {
+                self.uiImage = image
             }
         }
     }

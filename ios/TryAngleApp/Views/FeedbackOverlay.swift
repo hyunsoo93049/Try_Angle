@@ -14,13 +14,13 @@ struct FeedbackOverlay: View {
         }()
 
         ZStack {
-            // 왼쪽 중간: 카테고리 체크리스트
+            // 🔄 왼쪽 상단: 카테고리 체크리스트 (프레이밍 박스 왼쪽 상단 모서리)
             if !categoryStatuses.isEmpty {
                 VStack {
-                    Spacer()
                     HStack {
                         CategoryChecklistView(categoryStatuses: categoryStatuses)
                             .padding(.leading, 12)
+                            .padding(.top, 120)  // 상단에서 약간 아래로 (상태바/노치 피하기)
                         Spacer()
                     }
                     Spacer()
@@ -57,9 +57,9 @@ struct FeedbackOverlay: View {
                             .id(completed.id)  // 고유 ID로 애니메이션 추적
                     }
 
-                    // 진행 중인 피드백들
+                    // 진행 중인 피드백들 (🔄 최대 2개로 제한)
                     if !feedbackItems.isEmpty {
-                        ForEach(feedbackItems.prefix(3)) { item in
+                        ForEach(feedbackItems.prefix(2)) { item in
                             FeedbackItemView(item: item)
                                 .transition(.move(edge: .bottom).combined(with: .opacity))
                                 .id(item.id)

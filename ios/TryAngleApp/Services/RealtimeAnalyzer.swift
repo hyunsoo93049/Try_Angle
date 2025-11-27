@@ -49,8 +49,13 @@ class RealtimeAnalyzer: ObservableObject {
 
     // 🐛 ContentView에서 접근 가능하도록 internal로 변경
     var referenceAnalysis: FrameAnalysis?
+    var referenceFramingResult: PhotographyFramingResult?  // 🆕 레퍼런스 사진학 프레이밍 분석 결과
     private var lastAnalysisTime = Date()
     private let analysisInterval: TimeInterval = 0.05  // 50ms마다 분석 - 반응속도 개선
+
+    // 🔥 분석 전용 백그라운드 큐 (UI 블로킹 방지)
+    private let analysisQueue = DispatchQueue(label: "com.tryangle.analysis", qos: .userInitiated)
+    private var isAnalyzing = false  // 분석 중복 방지 플래그
 
     // 히스테리시스를 위한 상태 추적
     private var feedbackHistory: [String: Int] = [:]  // 카테고리별 연속 감지 횟수
@@ -78,20 +83,35 @@ class RealtimeAnalyzer: ObservableObject {
     ]
 
     // 🔥 RTMPose 분석기 (ONNX Runtime with CoreML EP)
-    private lazy var poseMLAnalyzer: PoseMLAnalyzer = {
-        print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 초기화 시작")
-        let analyzer = PoseMLAnalyzer()
-        print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 초기화 완료")
-        return analyzer
-    }()
+    private var poseMLAnalyzer: PoseMLAnalyzer!
     private let compositionAnalyzer = CompositionAnalyzer()
     private let cameraAngleDetector = CameraAngleDetector()
     private let gazeTracker = GazeTracker()
     private let depthEstimator = DepthEstimator()
     private let poseComparator = AdaptivePoseComparator()
     private let gapAnalyzer = GapAnalyzer()
-    private let feedbackGenerator = FeedbackGenerator()
-    private let framingAnalyzer = FramingAnalyzer()  // 🆕 프레이밍 분석기 추가
+    private let feedbackGenerator = FeedbackGenerator()  // 🗑️ 구식 (Phase 3 이후 단계별 생성기 사용)
+    private let framingAnalyzer = FramingAnalyzer()  // 기존 프레이밍 분석기
+    private let photographyFramingAnalyzer = PhotographyFramingAnalyzer()  // 🆕 사진학 기반 프레이밍 분석기
+    private let stagedFeedbackGenerator = StagedFeedbackGenerator()  // 🆕 Phase 3: 단계별 피드백 생성기
+
+    // 🆕 초기화
+    init() {
+        print("🎬🎬🎬 RealtimeAnalyzer init() 호출됨 🎬🎬🎬")
+
+        // 🔥 PoseMLAnalyzer를 백그라운드에서 미리 로드 (앱 시작 시 17초 지연 방지)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 백그라운드 초기화 시작")
+            let startTime = CACurrentMediaTime()
+            let analyzer = PoseMLAnalyzer()
+            let loadTime = (CACurrentMediaTime() - startTime) * 1000
+            print("✅ RealtimeAnalyzer: PoseMLAnalyzer 초기화 완료 (\(String(format: "%.0f", loadTime))ms)")
+
+            DispatchQueue.main.async {
+                self?.poseMLAnalyzer = analyzer
+            }
+        }
+    }
 
     // Vision 요청 캐싱
     private lazy var faceDetectionRequest: VNDetectFaceLandmarksRequest = {
@@ -105,13 +125,46 @@ class RealtimeAnalyzer: ObservableObject {
         return request
     }()
 
-    init() {
-        print("🎬🎬🎬 RealtimeAnalyzer init() 호출됨 🎬🎬🎬")
-    }
-
     // MARK: - Helper Methods
 
-    /// 여백 계산
+    /// 여백 계산 (RTMPose 구조적 키포인트 기반)
+    private func calculatePaddingFromKeypoints(
+        keypoints: [(point: CGPoint, confidence: Float)]
+    ) -> ImagePadding? {
+        // 구조적 키포인트만 사용 (0-16: 몸통 키포인트, 손가락/얼굴 랜드마크 제외)
+        let structuralIndices = PhotographyFramingAnalyzer.StructuralKeypoints.all
+
+        // 신뢰도 0.3 이상인 키포인트만 필터링
+        let validPoints = structuralIndices.compactMap { idx -> CGPoint? in
+            guard idx < keypoints.count else { return nil }
+            return keypoints[idx].confidence > 0.3 ? keypoints[idx].point : nil
+        }
+
+        // 최소 3개 이상의 키포인트가 필요
+        guard validPoints.count >= 3 else { return nil }
+
+        // 바운딩 박스 계산 (정규화된 좌표: 0.0 ~ 1.0)
+        let minX = validPoints.map { $0.x }.min() ?? 0
+        let maxX = validPoints.map { $0.x }.max() ?? 1
+        let minY = validPoints.map { $0.y }.min() ?? 0
+        let maxY = validPoints.map { $0.y }.max() ?? 1
+
+        // 여백 계산 (정규화된 좌표계)
+        let top = 1.0 - maxY     // 상단 여백
+        let bottom = minY        // 하단 여백
+        let left = minX          // 좌측 여백
+        let right = 1.0 - maxX   // 우측 여백
+
+        return ImagePadding(
+            top: top,
+            bottom: bottom,
+            left: left,
+            right: right
+        )
+    }
+
+    /// 🗑️ 구식 여백 계산 (얼굴 위치 기반 bodyRect 추정) - 더 이상 사용 안함
+    @available(*, deprecated, message: "Use calculatePaddingFromKeypoints instead")
     private func calculatePadding(bodyRect: CGRect?, imageSize: CGSize) -> ImagePadding? {
         guard let body = bodyRect else { return nil }
 
@@ -143,12 +196,22 @@ class RealtimeAnalyzer: ObservableObject {
             return
         }
 
+        // 🆕 모델 로딩 대기
+        guard let analyzer = poseMLAnalyzer else {
+            print("⏳ PoseMLAnalyzer 로딩 중... 레퍼런스 분석 대기")
+            // 0.5초 후 재시도
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.analyzeReference(image)
+            }
+            return
+        }
+
         print("🎯 레퍼런스 이미지 크기: \(cgImage.width) x \(cgImage.height)")
         print("🎯 레퍼런스 이미지 orientation: \(image.imageOrientation.rawValue)")
 
         // 🔥 RTMPose로 얼굴+포즈 동시 분석 (ONNX Runtime with CoreML EP)
         print("🎯 PoseMLAnalyzer.analyzeFaceAndPose() 호출 중...")
-        let (faceResult, poseResult) = poseMLAnalyzer.analyzeFaceAndPose(from: image)
+        let (faceResult, poseResult) = analyzer.analyzeFaceAndPose(from: image)
         print("🎯 분석 완료:")
         print("   - 얼굴: \(faceResult != nil ? "✅ 검출됨" : "❌ 검출 안됨")")
         print("   - 포즈: \(poseResult != nil ? "✅ 검출됨 (\(poseResult!.keypoints.count)개 키포인트)" : "❌ 검출 안됨")")
@@ -211,8 +274,43 @@ class RealtimeAnalyzer: ObservableObject {
         let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
         let aspectRatio = CameraAspectRatio.detect(from: imageSize)
 
-        // 🆕 여백 계산
-        let padding = calculatePadding(bodyRect: bodyRect, imageSize: imageSize)
+        // 🆕 여백 계산 (RTMPose 키포인트 기반)
+        var padding: ImagePadding? = nil
+        if let keypoints = poseKeypoints, keypoints.count >= 17 {
+            // 키포인트를 정규화된 좌표로 변환 (0.0 ~ 1.0)
+            let normalizedKeypoints = keypoints.map { kp -> (point: CGPoint, confidence: Float) in
+                let normalizedPoint = CGPoint(
+                    x: kp.point.x / imageSize.width,
+                    y: kp.point.y / imageSize.height
+                )
+                return (point: normalizedPoint, confidence: kp.confidence)
+            }
+            // 구조적 키포인트(0-16)로 여백 계산
+            padding = calculatePaddingFromKeypoints(keypoints: normalizedKeypoints)
+        }
+
+        // 🆕 사진학 기반 프레이밍 분석 (RTMPose 133개 키포인트)
+        if let keypoints = poseKeypoints, keypoints.count >= 133 {
+            let normalizedKeypoints = keypoints.map { kp -> (point: CGPoint, confidence: Float) in
+                let normalizedPoint = CGPoint(
+                    x: kp.point.x / imageSize.width,
+                    y: kp.point.y / imageSize.height
+                )
+                return (point: normalizedPoint, confidence: kp.confidence)
+            }
+            referenceFramingResult = photographyFramingAnalyzer.analyze(
+                keypoints: normalizedKeypoints,
+                imageSize: imageSize
+            )
+            if let refFraming = referenceFramingResult {
+                print("   - 📸 레퍼런스 샷 타입: \(refFraming.shotType.rawValue)")
+                print("   - 📸 레퍼런스 헤드룸: \(String(format: "%.1f%%", refFraming.headroom * 100))")
+                print("   - 📸 레퍼런스 카메라 앵글: \(refFraming.cameraAngle.rawValue)")
+            }
+        } else {
+            referenceFramingResult = nil
+            print("   - ⚠️ 사진학 프레이밍 분석 불가 (키포인트 부족)")
+        }
 
         referenceAnalysis = FrameAnalysis(
             faceRect: faceRect,
@@ -261,9 +359,12 @@ class RealtimeAnalyzer: ObservableObject {
     }
 
     // MARK: - 실시간 프레임 분석
-    func analyzeFrame(_ image: UIImage, isFrontCamera: Bool = false) {
+    func analyzeFrame(_ image: UIImage, isFrontCamera: Bool = false, currentAspectRatio: CameraAspectRatio = .ratio4_3) {
         // 너무 자주 분석하지 않도록 제한
         guard Date().timeIntervalSince(lastAnalysisTime) >= analysisInterval else { return }
+
+        // 이미 분석 중이면 스킵 (UI 블로킹 방지)
+        guard !isAnalyzing else { return }
 
         // 레퍼런스가 없으면 분석하지 않음
         guard let reference = referenceAnalysis else {
@@ -277,10 +378,59 @@ class RealtimeAnalyzer: ObservableObject {
 
         guard let cgImage = image.cgImage else { return }
         lastAnalysisTime = Date()
+        isAnalyzing = true
 
-        // 🔥 메인 쓰레드에서 동기 실행 (GPU 접근 보장 + 프레임 스키핑 제거)
-        // RTMPose로 분석 (ONNX Runtime with CoreML EP) - 메인 쓰레드에서 실행
-        let (faceResult, poseResult) = poseMLAnalyzer.analyzeFaceAndPose(from: image)
+        // 🔥 백그라운드 큐에서 분석 실행 (UI 블로킹 방지)
+        analysisQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            // 🆕 모델 로딩 대기 (앱 시작 직후)
+            guard let analyzer = self.poseMLAnalyzer else {
+                print("⏳ PoseMLAnalyzer 로딩 중... 분석 스킵")
+                DispatchQueue.main.async {
+                    self.isAnalyzing = false
+                }
+                return
+            }
+
+            let analysisStart = CACurrentMediaTime()  // 🔍 프로파일링
+
+            // RTMPose로 분석 (ONNX Runtime with CoreML EP)
+            let poseStart = CACurrentMediaTime()  // 🔍
+            let (faceResult, poseResult) = analyzer.analyzeFaceAndPose(from: image)
+            let poseEnd = CACurrentMediaTime()  // 🔍
+
+            let analysisEnd = CACurrentMediaTime()  // 🔍
+
+            // 🔍 프로파일링 로그 (매 분석마다)
+            let poseTime = (poseEnd - poseStart) * 1000
+            let totalTime = (analysisEnd - analysisStart) * 1000
+            print("📊 [RealtimeAnalyzer] RTMPose: \(String(format: "%.1f", poseTime))ms, 총분석: \(String(format: "%.1f", totalTime))ms")
+
+            // 분석 완료 후 메인 스레드에서 UI 업데이트
+            DispatchQueue.main.async {
+                self.isAnalyzing = false
+                self.processAnalysisResult(
+                    faceResult: faceResult,
+                    poseResult: poseResult,
+                    cgImage: cgImage,
+                    reference: reference,
+                    isFrontCamera: isFrontCamera,
+                    currentAspectRatio: currentAspectRatio
+                )
+            }
+        }
+    }
+
+    // MARK: - 분석 결과 처리 (메인 스레드)
+    private func processAnalysisResult(
+        faceResult: FaceAnalysisResult?,
+        poseResult: PoseAnalysisResult?,
+        cgImage: CGImage,
+        reference: FrameAnalysis,
+        isFrontCamera: Bool,
+        currentAspectRatio: CameraAspectRatio
+    ) {
 
         // 얼굴이 감지되지 않으면 완성도 0으로 설정
         guard faceResult != nil else {
@@ -336,12 +486,23 @@ class RealtimeAnalyzer: ObservableObject {
             )
         }
 
-        // 🆕 비율 감지 (현재 카메라)
+        // 🆕 현재 이미지 크기 (비율은 파라미터로 받음 - CameraManager에서 설정된 값 사용)
         let currentImageSize = CGSize(width: cgImage.width, height: cgImage.height)
-        let currentAspectRatio = CameraAspectRatio.detect(from: currentImageSize)
 
-        // 🆕 여백 계산
-        let currentPadding = calculatePadding(bodyRect: bodyRect, imageSize: currentImageSize)
+        // 🆕 여백 계산 (RTMPose 키포인트 기반)
+        var currentPadding: ImagePadding? = nil
+        if let keypoints = poseResult?.keypoints, keypoints.count >= 17 {
+            // 키포인트를 정규화된 좌표로 변환 (0.0 ~ 1.0)
+            let normalizedKeypoints = keypoints.map { kp -> (point: CGPoint, confidence: Float) in
+                let normalizedPoint = CGPoint(
+                    x: kp.point.x / currentImageSize.width,
+                    y: kp.point.y / currentImageSize.height
+                )
+                return (point: normalizedPoint, confidence: kp.confidence)
+            }
+            // 구조적 키포인트(0-16)로 여백 계산
+            currentPadding = calculatePaddingFromKeypoints(keypoints: normalizedKeypoints)
+        }
 
         // 🆕 프레이밍 분석 추가 (최우선)
         let currentFrame = FrameAnalysis(
@@ -361,89 +522,81 @@ class RealtimeAnalyzer: ObservableObject {
             imagePadding: currentPadding
         )
 
-        // 🆕 비율 불일치 체크 (최최우선)
-        var ratioMismatchFeedback: FeedbackItem? = nil
-        if reference.aspectRatio != currentAspectRatio {
-            let targetRatio = reference.aspectRatio.displayName
-            ratioMismatchFeedback = FeedbackItem(
-                priority: -1,  // 최고 우선순위
-                icon: "📐",
-                message: "카메라 비율을 \(targetRatio)로 변경하세요",
-                category: "aspect_ratio_mismatch",
-                currentValue: nil,
-                targetValue: nil,
-                tolerance: nil,
-                unit: nil
+        // 🗑️ 비율 불일치 체크는 이제 StagedFeedbackGenerator가 처리 (Phase 3)
+
+        // 🆕 사진학 기반 프레이밍 분석 (RTMPose 133개 키포인트 활용)
+        var photographyFramingResult: PhotographyFramingResult? = nil
+        if let keypoints = poseResult?.keypoints, keypoints.count >= 133 {
+            // 키포인트를 정규화된 좌표로 변환
+            let normalizedKeypoints = keypoints.map { kp -> (point: CGPoint, confidence: Float) in
+                let normalizedPoint = CGPoint(
+                    x: kp.point.x / currentImageSize.width,
+                    y: kp.point.y / currentImageSize.height
+                )
+                return (point: normalizedPoint, confidence: kp.confidence)
+            }
+            photographyFramingResult = photographyFramingAnalyzer.analyze(
+                keypoints: normalizedKeypoints,
+                imageSize: currentImageSize
             )
         }
 
-        let framingResult = framingAnalyzer.analyzeFraming(
-            reference: reference,
-            current: currentFrame,
-            currentAspectRatio: currentAspectRatio
-        )
+        // 🆕 Phase 3: 단계별 피드백 시스템
 
-        // 🆕 GapAnalyzer로 차이 계산
-        let gaps = gapAnalyzer.analyzeGaps(
-            reference: reference,
-            current: (
-                face: faceResult,
-                pose: poseResult,
-                bodyRect: bodyRect,
-                brightness: brightness,
-                tilt: tilt,
-                cameraAngle: cameraAngle,
-                compositionType: compositionType,
-                gaze: gaze,
-                depth: depth,
-                aspectRatio: currentAspectRatio,
-                padding: currentPadding
+        // 1. 포즈 비교 (잘림 감지용)
+        var poseComparison: PoseComparisonResult? = nil
+        var croppedGroups: [KeypointGroup] = []
+
+        if let refKeypoints = reference.poseKeypoints,
+           let curKeypoints = poseResult?.keypoints,
+           refKeypoints.count >= 133 && curKeypoints.count >= 133 {
+
+            poseComparison = poseComparator.comparePoses(
+                referenceKeypoints: refKeypoints,
+                currentKeypoints: curKeypoints
             )
-        )
 
-        // 🆕 FeedbackGenerator로 피드백 생성
-        var feedbacks = feedbackGenerator.generateFeedback(
-            from: gaps,
-            reference: reference,
-            current: (
-                face: faceResult,
-                pose: poseResult,
-                bodyRect: bodyRect,
-                brightness: brightness,
-                tilt: tilt,
-                cameraAngle: cameraAngle,
-                compositionType: compositionType,
-                gaze: gaze,
-                depth: depth
-            ),
-            isFrontCamera: isFrontCamera  // 🆕 전면 카메라 여부 전달
-        )
-
-        // 프레이밍 피드백이 있으면 최우선으로 추가
-        if let framing = framingResult.feedback {
-            feedbacks.insert(FeedbackItem(
-                priority: 0,  // 최고 우선순위
-                icon: "📐",
-                message: framing,
-                category: "framing",
-                currentValue: nil,
-                targetValue: nil,
-                tolerance: nil,
-                unit: nil
-            ), at: 0)
+            // 잘린 그룹 감지 (샷 타입 기반)
+            if let refFraming = referenceFramingResult {
+                croppedGroups = poseComparator.detectCroppedGroups(
+                    referenceKeypoints: refKeypoints,
+                    currentKeypoints: curKeypoints,
+                    shotType: refFraming.shotType
+                )
+            }
         }
+
+        // 2. 현재 피드백 단계 결정
+        let feedbackStage = stagedFeedbackGenerator.determineFeedbackStage(
+            referenceFraming: referenceFramingResult,
+            currentFraming: photographyFramingResult,
+            referenceAspectRatio: reference.aspectRatio,
+            currentAspectRatio: currentAspectRatio,
+            poseComparison: poseComparison
+        )
+
+        // 3. 단계별 피드백 생성
+        var feedbacks = stagedFeedbackGenerator.generateStagedFeedback(
+            stage: feedbackStage,
+            referenceFraming: referenceFramingResult,
+            currentFraming: photographyFramingResult,
+            referenceAspectRatio: reference.aspectRatio,
+            currentAspectRatio: currentAspectRatio,
+            poseComparison: poseComparison,
+            croppedGroups: croppedGroups,
+            isFrontCamera: isFrontCamera
+        )
 
         // 히스테리시스 적용: 연속으로 감지된 피드백만 표시
         var stableFeedback: [FeedbackItem] = []
         var currentCategories = Set<String>()
 
-        // 🆕 비율 불일치는 히스테리시스 없이 즉시 표시 (최고 우선순위)
-        if let ratioFeedback = ratioMismatchFeedback {
-            stableFeedback.append(ratioFeedback)
-            currentCategories.insert(ratioFeedback.category)
-        }
-
         for fb in feedbacks {
+            // 🔧 이미 추가된 category는 스킵 (중복 방지)
+            if currentCategories.contains(fb.category) {
+                continue
+            }
+
             currentCategories.insert(fb.category)
             feedbackHistory[fb.category, default: 0] += 1
 
@@ -486,9 +639,10 @@ class RealtimeAnalyzer: ObservableObject {
             }
         }
 
-        // 완벽한 상태 감지 (GapAnalyzer 사용)
-        let score = gapAnalyzer.calculateCompletionScore(gaps: gaps)
-        let isCurrentlyPerfect = stableFeedback.isEmpty && score > 0.95
+        // 완벽한 상태 감지 (Phase 3: 단계별 시스템)
+        // 피드백이 없고 Stage가 complete면 완벽
+        let isCurrentlyPerfect = stableFeedback.isEmpty && feedbackStage == .complete
+        let score = isCurrentlyPerfect ? 1.0 : (1.0 - Double(stableFeedback.count) * 0.1)
 
         if isCurrentlyPerfect {
             perfectFrameCount += 1
