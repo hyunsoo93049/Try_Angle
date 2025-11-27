@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct ReferenceGalleryViewSimple: View {
     @Binding var selectedTab: Int
@@ -7,6 +8,24 @@ struct ReferenceGalleryViewSimple: View {
     @State private var selectedCategoryIndex = 1  // Hot부터 시작
     @State private var searchText = ""
     @AppStorage("mySavedPhotos") private var savedPhotosData: String = ""
+
+    // 갤러리 업로드 관련
+    @State private var showingImagePicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var myUploadedPhotos: [UploadedPhoto] = []
+
+    // 업로드된 사진 모델
+    struct UploadedPhoto: Identifiable, Codable {
+        let id: UUID
+        let fileName: String
+        let dateAdded: Date
+
+        init(fileName: String) {
+            self.id = UUID()
+            self.fileName = fileName
+            self.dateAdded = Date()
+        }
+    }
 
     private var mySavedPhotos: [String] {
         savedPhotosData.isEmpty ? [] : savedPhotosData.components(separatedBy: ",")
@@ -129,37 +148,39 @@ struct ReferenceGalleryViewSimple: View {
                         ForEach(Array(categories.enumerated()), id: \.offset) { index, category in
                             Group {
                                 if index == 0 {
-                                    // My 카테고리
-                                    if mySavedPhotos.isEmpty {
-                                        VStack {
-                                            Spacer()
-                                            Text("아직 저장한 사진이 없어요\n\n마음에 드는 사진을 골라주세요")
-                                                .font(.system(size: 20, weight: .medium))
-                                                .multilineTextAlignment(.center)
-                                                .foregroundColor(.black)
-                                            Spacer()
-                                        }
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        .background(Color.white)
-                                    } else {
-                                        ScrollView {
-                                            LazyVGrid(columns: [
-                                                GridItem(.flexible(), spacing: 5),
-                                                GridItem(.flexible(), spacing: 5)
-                                            ], spacing: 15) {
-                                                ForEach(mySavedPhotos, id: \.self) { photoName in
-                                                    SimplePhotoCard(
-                                                        imageName: photoName,
-                                                        isFavorite: isFavorite(photoName),
-                                                        onToggleFavorite: { saveFavorite(photoName) },
-                                                        onSelectImage: onSelectImage
-                                                    )
-                                                }
+                                    // My 카테고리 - 항상 + 버튼 표시
+                                    ScrollView {
+                                        LazyVGrid(columns: [
+                                            GridItem(.flexible(), spacing: 5),
+                                            GridItem(.flexible(), spacing: 5)
+                                        ], spacing: 15) {
+                                            // + 버튼 카드 (항상 첫 번째)
+                                            AddPhotoCardSimple {
+                                                showingImagePicker = true
                                             }
-                                            .padding(.horizontal, 10)
-                                            .padding(.top, 10)
-                                            .padding(.bottom, 90)
+
+                                            // 사용자가 업로드한 사진들
+                                            ForEach(myUploadedPhotos) { photo in
+                                                UploadedPhotoCard(
+                                                    photo: photo,
+                                                    onDelete: { deleteUploadedPhoto(photo) },
+                                                    onSelectImage: onSelectImage
+                                                )
+                                            }
+
+                                            // 즐겨찾기한 기본 사진들
+                                            ForEach(mySavedPhotos, id: \.self) { photoName in
+                                                SimplePhotoCard(
+                                                    imageName: photoName,
+                                                    isFavorite: isFavorite(photoName),
+                                                    onToggleFavorite: { saveFavorite(photoName) },
+                                                    onSelectImage: onSelectImage
+                                                )
+                                            }
                                         }
+                                        .padding(.horizontal, 10)
+                                        .padding(.top, 10)
+                                        .padding(.bottom, 90)
                                     }
                                 } else {
                                     // 다른 카테고리
@@ -191,6 +212,79 @@ struct ReferenceGalleryViewSimple: View {
                     .padding(.top, 5)
                 }
             }
+        }
+        .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
+        .onChange(of: selectedPhotoItem) { newItem in
+            Task {
+                if let newItem = newItem {
+                    await loadAndSavePhoto(from: newItem)
+                }
+            }
+        }
+        .onAppear {
+            loadUploadedPhotos()
+        }
+    }
+
+    // MARK: - 사진 업로드 함수
+
+    /// 선택한 사진을 앱 저장소에 저장
+    private func loadAndSavePhoto(from item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            print("❌ 이미지 로드 실패")
+            return
+        }
+
+        // 파일명 생성
+        let fileName = "my_\(UUID().uuidString).jpg"
+
+        // Documents 디렉토리에 저장
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsURL.appendingPathComponent(fileName)
+
+            if let jpegData = image.jpegData(compressionQuality: 0.8) {
+                do {
+                    try jpegData.write(to: fileURL)
+                    print("✅ 사진 저장 완료: \(fileName)")
+
+                    DispatchQueue.main.async {
+                        let newPhoto = UploadedPhoto(fileName: fileName)
+                        myUploadedPhotos.insert(newPhoto, at: 0)
+                        saveUploadedPhotosList()
+                    }
+                } catch {
+                    print("❌ 사진 저장 실패: \(error)")
+                }
+            }
+        }
+
+        selectedPhotoItem = nil
+    }
+
+    /// 업로드된 사진 삭제
+    private func deleteUploadedPhoto(_ photo: UploadedPhoto) {
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsURL.appendingPathComponent(photo.fileName)
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        myUploadedPhotos.removeAll { $0.id == photo.id }
+        saveUploadedPhotosList()
+    }
+
+    /// 저장된 사진 목록 불러오기
+    private func loadUploadedPhotos() {
+        if let data = UserDefaults.standard.data(forKey: "myUploadedPhotos"),
+           let photos = try? JSONDecoder().decode([UploadedPhoto].self, from: data) {
+            myUploadedPhotos = photos
+        }
+    }
+
+    /// 저장된 사진 목록 저장
+    private func saveUploadedPhotosList() {
+        if let data = try? JSONEncoder().encode(myUploadedPhotos) {
+            UserDefaults.standard.set(data, forKey: "myUploadedPhotos")
         }
     }
 }
@@ -301,6 +395,116 @@ struct SimplePhotoCard: View {
         }
 
         print("❌ 이미지 로드 실패: \(imageName)")
+    }
+}
+
+// MARK: - + 버튼 카드 (사진 추가)
+struct AddPhotoCardSimple: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "#f5f5f5"))
+                    .frame(width: 184, height: 184)
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 40, weight: .light))
+                                .foregroundColor(Color(hex: "#888888"))
+
+                            Text("직접 추가하기")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(hex: "#888888"))
+                        }
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
+                            .foregroundColor(Color(hex: "#cccccc"))
+                    )
+
+                // 빈 공간 (다른 카드와 높이 맞춤)
+                Color.clear
+                    .frame(height: 18)
+                    .padding(.trailing, 8)
+            }
+        }
+    }
+}
+
+// MARK: - 업로드된 사진 카드
+struct UploadedPhotoCard: View {
+    let photo: ReferenceGalleryViewSimple.UploadedPhoto
+    let onDelete: () -> Void
+    let onSelectImage: (UIImage) -> Void
+
+    @State private var loadedImage: UIImage?
+    @State private var showDeleteConfirm = false
+    @State private var showImageDetail = false
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 15) {
+            ZStack(alignment: .topTrailing) {
+                if let image = loadedImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 184, height: 184)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .onTapGesture {
+                            showImageDetail = true
+                        }
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 184, height: 184)
+                        .overlay(ProgressView())
+                }
+
+                // 삭제 버튼
+                Button(action: { showDeleteConfirm = true }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white)
+                        .shadow(radius: 2)
+                }
+                .padding(8)
+            }
+
+            // 채워진 하트
+            Image(systemName: "heart.fill")
+                .font(.system(size: 18))
+                .foregroundColor(.red)
+                .padding(.trailing, 8)
+        }
+        .onAppear {
+            loadImage()
+        }
+        .alert("사진 삭제", isPresented: $showDeleteConfirm) {
+            Button("취소", role: .cancel) { }
+            Button("삭제", role: .destructive) { onDelete() }
+        } message: {
+            Text("이 사진을 삭제하시겠습니까?")
+        }
+        .fullScreenCover(isPresented: $showImageDetail) {
+            if let image = loadedImage {
+                ImageDetailView(
+                    image: image,
+                    onSelectImage: { onSelectImage(image) }
+                )
+            }
+        }
+    }
+
+    private func loadImage() {
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let fileURL = documentsURL.appendingPathComponent(photo.fileName)
+            if let image = UIImage(contentsOfFile: fileURL.path) {
+                loadedImage = image
+            }
+        }
     }
 }
 
