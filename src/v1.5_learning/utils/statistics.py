@@ -36,8 +36,8 @@ class PatternStats:
     sitting_ratio: float
     common_visible_joints: List[str]
 
-    # 메타데이터
-    exemplars: List[str]
+    # 메타데이터 (점수 기반 선정된 exemplars)
+    exemplars: List[Dict]  # [{filename, score}, ...]
 
 
 class PatternStatistics:
@@ -204,8 +204,14 @@ class PatternStatistics:
             if count >= threshold
         ]
 
-        # Exemplars (상위 5개 - 나중에 점수 기반으로 선정)
-        exemplars = filenames[:5] if filenames else []
+        # Exemplars: 패턴 평균에 가장 가까운 샘플 5개 선정
+        pattern_mean = {
+            "position": position_mean,
+            "size_ratio": size_mean,
+            "compression_index": compression_mean,
+            "estimated_angle": angle_mean
+        }
+        exemplars = self._select_exemplars(samples, pattern_mean, top_k=5)
 
         return PatternStats(
             theme=theme,
@@ -265,6 +271,100 @@ class PatternStatistics:
                 result.append(point)
 
         return result if result else data
+
+    def _select_exemplars(
+        self,
+        samples: List[Dict],
+        pattern_mean: Dict,
+        top_k: int = 5
+    ) -> List[Dict]:
+        """
+        패턴 평균에 가장 가까운 샘플들을 exemplar로 선정
+
+        Args:
+            samples: 모든 샘플 리스트
+            pattern_mean: 패턴 평균값 딕셔너리
+            top_k: 선정할 exemplar 개수
+
+        Returns:
+            [{filename, score}, ...] 점수 높은 순
+        """
+        scored_samples = []
+
+        for sample in samples:
+            if not sample.get("filename"):
+                continue
+
+            score = self._calculate_sample_score(sample, pattern_mean)
+            scored_samples.append({
+                "filename": sample["filename"],
+                "score": score
+            })
+
+        # 점수 높은 순 정렬 (1.0에 가까울수록 좋음)
+        scored_samples.sort(key=lambda x: x["score"], reverse=True)
+
+        return scored_samples[:top_k]
+
+    def _calculate_sample_score(
+        self,
+        sample: Dict,
+        pattern_mean: Dict
+    ) -> float:
+        """
+        샘플이 패턴 평균에 얼마나 가까운지 점수 계산
+
+        Returns:
+            0.0 ~ 1.0 (1.0 = 완벽히 일치)
+        """
+        scores = []
+        weights = []
+
+        # 1. 위치 점수 (가중치 0.35)
+        if "position" in sample and "position" in pattern_mean:
+            pos = sample["position"]
+            mean_pos = pattern_mean["position"]
+            # 유클리드 거리 (최대 ~1.4)
+            dist = np.sqrt((pos[0] - mean_pos[0])**2 + (pos[1] - mean_pos[1])**2)
+            pos_score = max(0, 1.0 - dist / 0.5)  # 0.5 이상 차이나면 0점
+            scores.append(pos_score)
+            weights.append(0.35)
+
+        # 2. 크기 점수 (가중치 0.25)
+        if "size_ratio" in sample and "size_ratio" in pattern_mean:
+            size = sample["size_ratio"]
+            mean_size = pattern_mean["size_ratio"]
+            size_diff = abs(size - mean_size)
+            size_score = max(0, 1.0 - size_diff / 0.2)  # 0.2 이상 차이나면 0점
+            scores.append(size_score)
+            weights.append(0.25)
+
+        # 3. 압축감 점수 (가중치 0.25)
+        if "compression_index" in sample and "compression_index" in pattern_mean:
+            comp = sample["compression_index"]
+            mean_comp = pattern_mean["compression_index"]
+            comp_diff = abs(comp - mean_comp)
+            comp_score = max(0, 1.0 - comp_diff / 0.3)  # 0.3 이상 차이나면 0점
+            scores.append(comp_score)
+            weights.append(0.25)
+
+        # 4. 앵글 점수 (가중치 0.15)
+        if "estimated_angle" in sample and "estimated_angle" in pattern_mean:
+            angle = sample["estimated_angle"]
+            mean_angle = pattern_mean["estimated_angle"]
+            angle_diff = abs(angle - mean_angle)
+            angle_score = max(0, 1.0 - angle_diff / 20)  # 20도 이상 차이나면 0점
+            scores.append(angle_score)
+            weights.append(0.15)
+
+        if not scores:
+            return 0.0
+
+        # 가중 평균
+        total_weight = sum(weights)
+        weighted_score = sum(s * w for s, w in zip(scores, weights)) / total_weight
+
+        return round(weighted_score, 4)
 
     def to_dict(self) -> Dict:
         """JSON 변환용 딕셔너리"""
@@ -339,9 +439,7 @@ class PatternStatistics:
                     "sitting_ratio": stats.sitting_ratio,
                     "visible_joints": stats.common_visible_joints
                 },
-                "exemplars": [
-                    {"filename": f, "score": 0} for f in stats.exemplars
-                ]
+                "exemplars": stats.exemplars  # [{filename, score}, ...]
             }
 
         return dict(themes)
