@@ -32,8 +32,8 @@ THEME_RULES = {
     'indoor_home': ['sofa', 'tv', 'bed', 'door', 'room']
 }
 
-# Pose Type 정의
-POSE_TYPES = ['closeup', 'upper_body', 'half_body', 'full_body']
+# Pose Type 정의 (새로운 4-type 분류 체계)
+POSE_TYPES = ['closeup', 'medium_shot', 'knee_shot', 'full_shot']
 
 
 class ImageClassifier:
@@ -53,26 +53,20 @@ class ImageClassifier:
             print("[Simple Mode] 폴더명 기반 분류")
 
     def _load_models(self):
-        """실제 모델 로드"""
+        """실제 모델 로드 - rtmlib 사용 (ONNX 기반)"""
         try:
-            from mmpose.apis import init_model, inference_topdown
-            from mmdet.apis import init_detector, inference_detector
+            from rtmlib import Wholebody
 
-            print("[RTMPose] 모델 로딩...")
+            print("[RTMPose] rtmlib 모델 로딩 (ONNX)...")
 
-            # RTMPose 설정
-            pose_config = 'rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py'
-            pose_checkpoint = 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmpose-l_simcc-ucoco_dw-ucoco_270e-384x288-2438fd99_20230728.pth'
+            # rtmlib Wholebody 모델 (YOLOX + RTMPose Wholebody)
+            # mode: 'lightweight', 'balanced', 'performance'
+            self.wholebody = Wholebody(
+                mode='balanced',  # balanced가 정확도/속도 균형
+                backend='onnxruntime'
+            )
 
-            # MMDet for person detection
-            det_config = 'rtmdet_m_640-8xb32_coco-person.py'
-            det_checkpoint = 'https://download.openmmlab.com/mmpose/v1/projects/rtmpose/rtmdet_m_8xb32-100e_coco-obj365-person-235e8209.pth'
-
-            self.detector = init_detector(det_config, det_checkpoint, device='cuda:0')
-            self.pose_model = init_model(pose_config, pose_checkpoint, device='cuda:0')
-            self.inference_topdown = inference_topdown
-
-            print("[OK] RTMPose 로드 완료")
+            print("[OK] rtmlib RTMPose 로드 완료")
         except Exception as e:
             print(f"[WARNING] 모델 로드 실패: {e}")
             print("Simple Mode로 전환합니다.")
@@ -132,12 +126,12 @@ class ImageClassifier:
 
     def _classify_pose_simple(self, image_path: Path) -> str:
         """Simple Mode: 랜덤 분포 (실제는 RTMPose 사용)"""
-        # 실제 분포 시뮬레이션
+        # 새로운 4-type 분류 체계
         weights = {
             'closeup': 0.1,
-            'upper_body': 0.3,
-            'half_body': 0.4,
-            'full_body': 0.2
+            'medium_shot': 0.35,
+            'knee_shot': 0.35,
+            'full_shot': 0.2
         }
         return random.choices(
             list(weights.keys()),
@@ -145,50 +139,44 @@ class ImageClassifier:
         )[0]
 
     def _classify_pose_with_model(self, image_path: Path) -> str:
-        """Model Mode: RTMPose로 pose type 분류"""
+        """
+        Model Mode: rtmlib RTMPose로 pose type 분류
+
+        새로운 4-type 분류 체계:
+        - closeup: 얼굴~어깨 (셀카, 클로즈업)
+        - medium_shot: 가슴~허리 (버스트샷, 웨이스트샷 통합)
+        - knee_shot: 허벅지~무릎
+        - full_shot: 전신
+
+        + 앉은 자세 감지 기능 포함
+        """
         try:
-            # 이미지 로드
+            # 이미지 로드 (BGR)
             img = cv2.imread(str(image_path))
             if img is None:
                 return self._classify_pose_simple(image_path)
 
-            # Person 검출
-            from mmdet.apis import inference_detector
-            det_results = inference_detector(self.detector, img)
+            img_height = img.shape[0]
+            img_width = img.shape[1]
 
-            # Person bbox 추출
-            if hasattr(det_results, 'pred_instances'):
-                bboxes = det_results.pred_instances.bboxes.cpu().numpy()
-                scores = det_results.pred_instances.scores.cpu().numpy()
-            else:
-                return self._classify_pose_simple(image_path)
+            # rtmlib로 keypoint 추출
+            keypoints, scores = self.wholebody(img)
 
-            if len(bboxes) == 0:
+            if keypoints is None or len(keypoints) == 0:
                 return 'unknown'
 
-            # 가장 높은 점수의 person 선택
-            max_idx = scores.argmax()
-            person_bbox = bboxes[max_idx]
-
-            # RTMPose로 keypoint 추출
-            pose_results = self.inference_topdown(
-                self.pose_model,
-                img,
-                bboxes=[person_bbox]
-            )
-
-            if len(pose_results) == 0:
-                return self._classify_pose_simple(image_path)
-
-            # Keypoints 분석
-            keypoints = pose_results[0].pred_instances.keypoints[0]  # (133, 2)
-            scores_kpt = pose_results[0].pred_instances.keypoint_scores[0]  # (133,)
+            # 첫 번째 person의 keypoints 사용
+            kpts = keypoints[0]  # (133, 2) - x, y coordinates
+            scores_kpt = scores[0]  # (133,) - confidence scores
 
             # 주요 관절 인덱스 (COCO-WholeBody format)
-            # 0-16: body, 17-22: feet, 23-90: face, 91-132: hands
             NOSE = 0
+            LEFT_EYE = 1
+            RIGHT_EYE = 2
             LEFT_SHOULDER = 5
             RIGHT_SHOULDER = 6
+            LEFT_ELBOW = 7
+            RIGHT_ELBOW = 8
             LEFT_HIP = 11
             RIGHT_HIP = 12
             LEFT_KNEE = 13
@@ -196,36 +184,122 @@ class ImageClassifier:
             LEFT_ANKLE = 15
             RIGHT_ANKLE = 16
 
-            conf_threshold = 0.3
-            img_height = img.shape[0]
+            # confidence threshold
+            conf_threshold = 0.5
 
-            # 관절 가시성 확인
-            nose_visible = scores_kpt[NOSE] > conf_threshold
-            shoulder_visible = (scores_kpt[LEFT_SHOULDER] > conf_threshold or
-                                scores_kpt[RIGHT_SHOULDER] > conf_threshold)
-            hip_visible = (scores_kpt[LEFT_HIP] > conf_threshold or
-                          scores_kpt[RIGHT_HIP] > conf_threshold)
-            knee_visible = (scores_kpt[LEFT_KNEE] > conf_threshold or
-                            scores_kpt[RIGHT_KNEE] > conf_threshold)
-            ankle_visible = (scores_kpt[LEFT_ANKLE] > conf_threshold or
-                             scores_kpt[RIGHT_ANKLE] > conf_threshold)
+            def is_valid(idx):
+                """keypoint가 유효한지 확인 (confidence 체크)"""
+                return scores_kpt[idx] >= conf_threshold
 
-            # Pose Type 판정 (설계 문서 기준)
-            if ankle_visible and knee_visible:
-                # 발목이 프레임 안에 있는지 확인
-                ankle_y = min(keypoints[LEFT_ANKLE][1], keypoints[RIGHT_ANKLE][1])
-                if ankle_y < img_height * 0.95:
-                    return 'full_body'
+            def is_in_frame(idx):
+                """keypoint가 프레임 내에 있는지 확인"""
+                if not is_valid(idx):
+                    return False
+                x, y = kpts[idx][0], kpts[idx][1]
+                margin_x = img_width * 0.03
+                margin_y = img_height * 0.03
+                return (margin_x < x < img_width - margin_x and
+                        margin_y < y < img_height - margin_y)
+
+            def get_avg_y(indices):
+                """유효한 keypoint들의 y좌표 평균 반환"""
+                valid_ys = [kpts[idx][1] for idx in indices if is_valid(idx)]
+                return np.mean(valid_ys) if valid_ys else None
+
+            def get_visible_y(indices):
+                """프레임 내 유효한 keypoint들의 y좌표 평균 반환"""
+                valid_ys = [kpts[idx][1] for idx in indices if is_in_frame(idx)]
+                return np.mean(valid_ys) if valid_ys else None
+
+            # ============================================
+            # 앉은 자세 감지
+            # ============================================
+            def detect_sitting():
+                """
+                앉은 자세인지 감지
+                - 서 있을 때: (knee_y - hip_y) / (hip_y - shoulder_y) ≈ 1.0~1.5
+                - 앉아 있을 때: (knee_y - hip_y) / (hip_y - shoulder_y) ≈ 0.2~0.5
+                """
+                shoulder_y = get_avg_y([LEFT_SHOULDER, RIGHT_SHOULDER])
+                hip_y = get_avg_y([LEFT_HIP, RIGHT_HIP])
+                knee_y = get_avg_y([LEFT_KNEE, RIGHT_KNEE])
+
+                if shoulder_y is None or hip_y is None or knee_y is None:
+                    return False, 0.0
+
+                torso_length = hip_y - shoulder_y
+                if torso_length <= 0:
+                    return False, 0.0
+
+                hip_to_knee = knee_y - hip_y
+                ratio = hip_to_knee / torso_length
+
+                # ratio < 0.6 이면 앉은 자세로 판단
+                is_sitting = ratio < 0.6
+                return is_sitting, ratio
+
+            is_sitting, sit_ratio = detect_sitting()
+
+            # ============================================
+            # 각 부위별 Y좌표 계산 (프레임 내 가시 부위만)
+            # ============================================
+            head_y = get_visible_y([NOSE, LEFT_EYE, RIGHT_EYE])
+            shoulder_y = get_visible_y([LEFT_SHOULDER, RIGHT_SHOULDER])
+            elbow_y = get_visible_y([LEFT_ELBOW, RIGHT_ELBOW])
+            hip_y = get_visible_y([LEFT_HIP, RIGHT_HIP])
+            knee_y = get_visible_y([LEFT_KNEE, RIGHT_KNEE])
+            ankle_y = get_visible_y([LEFT_ANKLE, RIGHT_ANKLE])
+
+            # ============================================
+            # Shot Type 결정 로직
+            # ============================================
+
+            # 1. 발목이 보이면 → full_shot 후보
+            if ankle_y is not None:
+                # 발목이 프레임 하단 85% 아래에 있으면 full_shot
+                if ankle_y > img_height * 0.85:
+                    return 'full_shot'
+                # 앉은 자세에서 발목이 보이는 경우 → knee_shot으로 분류
+                elif is_sitting:
+                    return 'knee_shot'
+                # 발목이 중간에 있으면 (잘린 전신) → knee_shot
+                elif ankle_y > img_height * 0.7:
+                    return 'knee_shot'
                 else:
-                    return 'half_body'
-            elif knee_visible and hip_visible:
-                return 'half_body'
-            elif shoulder_visible and hip_visible:
-                return 'upper_body'
-            elif nose_visible or shoulder_visible:
+                    return 'medium_shot'
+
+            # 2. 무릎이 보이면 → knee_shot
+            if knee_y is not None:
+                # 무릎이 프레임 하단 75% 아래면 확실한 knee_shot
+                if knee_y > img_height * 0.75:
+                    return 'knee_shot'
+                # 앉은 자세에서 무릎이 보이면 → medium_shot
+                elif is_sitting:
+                    return 'medium_shot'
+                # 무릎이 중간에 있으면 → knee_shot
+                elif knee_y > img_height * 0.5:
+                    return 'knee_shot'
+                else:
+                    return 'medium_shot'
+
+            # 3. 골반(hip) 또는 팔꿈치(elbow)가 보이면 → medium_shot
+            if hip_y is not None or elbow_y is not None:
+                return 'medium_shot'
+
+            # 4. 어깨까지만 보이면 → closeup vs medium_shot
+            if shoulder_y is not None:
+                # 어깨가 프레임 하단 70% 아래면 medium_shot
+                if shoulder_y > img_height * 0.7:
+                    return 'medium_shot'
+                # 어깨가 중간에 있으면 closeup
+                else:
+                    return 'closeup'
+
+            # 5. 머리만 보이면 → closeup
+            if head_y is not None:
                 return 'closeup'
-            else:
-                return 'unknown'
+
+            return 'unknown'
 
         except Exception as e:
             print(f"\n[WARNING] RTMPose 에러 ({image_path.name}): {e}")
