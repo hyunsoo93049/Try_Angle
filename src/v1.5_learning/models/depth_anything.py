@@ -158,7 +158,11 @@ class DepthAnythingWrapper:
 
         # PIL to numpy
         img_np = np.array(image)
-        if img_np.shape[2] == 4:  # RGBA
+
+        # Grayscale/RGBA 처리
+        if len(img_np.shape) == 2:  # Grayscale
+            img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
+        elif img_np.shape[2] == 4:  # RGBA
             img_np = img_np[:, :, :3]
 
         # BGR로 변환 (OpenCV 형식)

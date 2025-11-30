@@ -31,9 +31,64 @@ COCO_KEYPOINTS = {
     16: "right_ankle"
 }
 
+# RTMPose Wholebody 133 keypoints
+# 0-16: Body (17), 17-22: Feet (6), 23-90: Face (68), 91-111: Left Hand (21), 112-132: Right Hand (21)
+WHOLEBODY_KEYPOINTS = {
+    # Body (0-16) - COCO format
+    0: "nose", 1: "left_eye", 2: "right_eye", 3: "left_ear", 4: "right_ear",
+    5: "left_shoulder", 6: "right_shoulder", 7: "left_elbow", 8: "right_elbow",
+    9: "left_wrist", 10: "right_wrist", 11: "left_hip", 12: "right_hip",
+    13: "left_knee", 14: "right_knee", 15: "left_ankle", 16: "right_ankle",
+
+    # Feet (17-22)
+    17: "left_big_toe", 18: "left_small_toe", 19: "left_heel",
+    20: "right_big_toe", 21: "right_small_toe", 22: "right_heel",
+
+    # Face (23-90) - 68 points following WFLW format
+    23: "face_0", 24: "face_1", 25: "face_2", 26: "face_3", 27: "face_4",
+    28: "face_5", 29: "face_6", 30: "face_7", 31: "face_8", 32: "face_9",
+    33: "face_10", 34: "face_11", 35: "face_12", 36: "face_13", 37: "face_14",
+    38: "face_15", 39: "face_16", 40: "face_17", 41: "face_18", 42: "face_19",
+    43: "face_20", 44: "face_21", 45: "face_22", 46: "face_23", 47: "face_24",
+    48: "face_25", 49: "face_26", 50: "face_27", 51: "face_28", 52: "face_29",
+    53: "face_30", 54: "face_31", 55: "face_32", 56: "left_eyebrow_0",
+    57: "left_eyebrow_1", 58: "left_eyebrow_2", 59: "left_eyebrow_3", 60: "left_eyebrow_4",
+    61: "right_eyebrow_0", 62: "right_eyebrow_1", 63: "right_eyebrow_2",
+    64: "right_eyebrow_3", 65: "right_eyebrow_4", 66: "nose_bridge_0",
+    67: "nose_bridge_1", 68: "nose_bridge_2", 69: "nose_bridge_3",
+    70: "nose_tip", 71: "nose_left", 72: "nose_right", 73: "nose_left_alar",
+    74: "nose_right_alar", 75: "left_eye_0", 76: "left_eye_1", 77: "left_eye_2",
+    78: "left_eye_3", 79: "left_eye_4", 80: "left_eye_5", 81: "right_eye_0",
+    82: "right_eye_1", 83: "right_eye_2", 84: "right_eye_3", 85: "right_eye_4",
+    86: "right_eye_5", 87: "mouth_outer_0", 88: "mouth_outer_1", 89: "mouth_outer_2",
+    90: "mouth_outer_3",
+
+    # Left Hand (91-111) - 21 points
+    91: "left_hand_wrist", 92: "left_thumb_cmc", 93: "left_thumb_mcp",
+    94: "left_thumb_ip", 95: "left_thumb_tip", 96: "left_index_mcp",
+    97: "left_index_pip", 98: "left_index_dip", 99: "left_index_tip",
+    100: "left_middle_mcp", 101: "left_middle_pip", 102: "left_middle_dip",
+    103: "left_middle_tip", 104: "left_ring_mcp", 105: "left_ring_pip",
+    106: "left_ring_dip", 107: "left_ring_tip", 108: "left_pinky_mcp",
+    109: "left_pinky_pip", 110: "left_pinky_dip", 111: "left_pinky_tip",
+
+    # Right Hand (112-132) - 21 points
+    112: "right_hand_wrist", 113: "right_thumb_cmc", 114: "right_thumb_mcp",
+    115: "right_thumb_ip", 116: "right_thumb_tip", 117: "right_index_mcp",
+    118: "right_index_pip", 119: "right_index_dip", 120: "right_index_tip",
+    121: "right_middle_mcp", 122: "right_middle_pip", 123: "right_middle_dip",
+    124: "right_middle_tip", 125: "right_ring_mcp", 126: "right_ring_pip",
+    127: "right_ring_dip", 128: "right_ring_tip", 129: "right_pinky_mcp",
+    130: "right_pinky_pip", 131: "right_pinky_dip", 132: "right_pinky_tip"
+}
+
 # 핵심 관절 그룹
 UPPER_BODY_JOINTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # 코 ~ 손목
 LOWER_BODY_JOINTS = [11, 12, 13, 14, 15, 16]            # 골반 ~ 발목
+FEET_JOINTS = [17, 18, 19, 20, 21, 22]                  # 발가락, 발뒤꿈치
+FACE_JOINTS = list(range(23, 91))                       # 얼굴 랜드마크
+LEFT_HAND_JOINTS = list(range(91, 112))                 # 왼손
+RIGHT_HAND_JOINTS = list(range(112, 133))               # 오른손
 
 
 @dataclass
@@ -182,10 +237,13 @@ class RTMPoseWrapper:
         keypoints_data = pose_results[0].pred_instances.keypoints[0]
         scores = pose_results[0].pred_instances.keypoint_scores[0]
 
-        # Keypoint 리스트 생성
+        # Keypoint 리스트 생성 (17 또는 133 keypoints 지원)
         keypoints = []
+        num_keypoints = len(keypoints_data)
+        keypoint_map = WHOLEBODY_KEYPOINTS if num_keypoints > 17 else COCO_KEYPOINTS
+
         for i, (kp, score) in enumerate(zip(keypoints_data, scores)):
-            name = COCO_KEYPOINTS.get(i, f"point_{i}")
+            name = keypoint_map.get(i, f"point_{i}")
             keypoints.append(Keypoint(
                 x=float(kp[0]) / width,
                 y=float(kp[1]) / height,
@@ -240,10 +298,13 @@ class RTMPoseWrapper:
         kps_data = results.keypoints.xy[idx].cpu().numpy()
         kps_conf = results.keypoints.conf[idx].cpu().numpy()
 
-        # Keypoint 리스트 생성
+        # Keypoint 리스트 생성 (17 또는 133 keypoints 지원)
         keypoints = []
+        num_keypoints = len(kps_data)
+        keypoint_map = WHOLEBODY_KEYPOINTS if num_keypoints > 17 else COCO_KEYPOINTS
+
         for i, (kp, score) in enumerate(zip(kps_data, kps_conf)):
-            name = COCO_KEYPOINTS.get(i, f"point_{i}")
+            name = keypoint_map.get(i, f"point_{i}")
             keypoints.append(Keypoint(
                 x=float(kp[0]) / width if kp[0] > 0 else 0,
                 y=float(kp[1]) / height if kp[1] > 0 else 0,
