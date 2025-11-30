@@ -92,14 +92,16 @@ class ImageClassifier:
         # 현재 폴더 구조 기반
         if 'cafe' in path_str or 'cluster_02' in path_str or 'cluster_05' in path_str:
             return 'cafe_indoor'
-        elif 'street' in path_str or 'cluster_12' in path_str or 'cluster_14' in path_str:
+        elif 'park' in path_str or 'nature' in path_str or 'cluster_03' in path_str or 'cluster_07' in path_str:
+            return 'park_nature'
+        elif 'street' in path_str or 'urban' in path_str or 'cluster_12' in path_str or 'cluster_14' in path_str or 'cluster_09' in path_str or 'cluster_11' in path_str:
             return 'street_urban'
         elif 'winter' in path_str or 'cluster_06' in path_str:
             return 'winter'
-        elif 'highangle' in path_str or 'cluster_08' in path_str:
-            return 'indoor_home'  # highangle을 indoor로 가정
+        elif 'indoor' in path_str or 'home' in path_str or 'highangle' in path_str or 'cluster_08' in path_str:
+            return 'indoor_home'
         elif 'person' in path_str:
-            # person 폴더 내 클러스터별 분류
+            # person 폴더 내 클러스터별 분류 (레거시)
             if 'cluster_03' in path_str or 'cluster_07' in path_str:
                 return 'park_nature'
             elif 'cluster_09' in path_str or 'cluster_11' in path_str:
