@@ -1,5 +1,5 @@
 # TryAngle v1.5 - Feedback Rules Configuration
-# 피드백 룰 설정 (임시 테스트용)
+# 피드백 룰 설정
 
 aspect_ratio:
   threshold: 0.1
@@ -13,3 +13,9 @@ position:
   priority: 2
   message_key: "feedback.position.adjust"
   impact_score: 10
+
+compression:
+  threshold: 0.1
+  priority: 3
+  message_key: "feedback.compression.adjust"
+  impact_score: 5
