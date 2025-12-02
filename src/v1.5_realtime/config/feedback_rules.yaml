@@ -1,0 +1,15 @@
+# TryAngle v1.5 - Feedback Rules Configuration
+# 피드백 룰 설정 (임시 테스트용)
+
+aspect_ratio:
+  threshold: 0.1
+  priority: 1
+  message_key: "feedback.aspect_ratio.change"
+  impact_score: 30
+  required: true
+
+position:
+  threshold: 0.03
+  priority: 2
+  message_key: "feedback.position.adjust"
+  impact_score: 10

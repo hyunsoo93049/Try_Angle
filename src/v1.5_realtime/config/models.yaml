@@ -1,0 +1,9 @@
+# TryAngle v1.5 - Model Configuration
+# 모델 설정 (임시 테스트용)
+
+grounding_dino:
+  checkpoint: "models/grounding_dino.pth"
+  confidence_threshold: 0.35
+
+depth_anything:
+  checkpoint: "models/depth_anything_v2.pth"

@@ -1,0 +1,11 @@
+# TryAngle v1.5 - Korean Messages
+# 한국어 메시지 (임시 테스트용)
+
+feedback:
+  aspect_ratio:
+    change: "카메라 종횡비 변경"
+    description: "{target}로 변경하세요"
+
+  position:
+    adjust: "위치 조정"
+    up: "피사체를 프레임 아래쪽으로 (카메라 ↑)"
