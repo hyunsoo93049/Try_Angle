@@ -17,6 +17,7 @@ class TryAngleOnDeviceAnalyzer {
     // 모델들
     private let rtmposeRunner: RTMPoseRunner
     private let depthEstimator: DepthAnythingCoreML
+    private let groundingDINO: GroundingDINOCoreML?  // 레거시 시스템 (선택적)
 
     // 피드백 생성기
     private let feedbackGenerator: OnDeviceFeedbackGenerator
@@ -24,8 +25,13 @@ class TryAngleOnDeviceAnalyzer {
     // 성능 추적
     private var performanceStats = PerformanceStats()
 
-    init() {
+    // 설정
+    private let useLegacySystem: Bool
+
+    init(enableLegacySystem: Bool = false) {
         print("🚀 TryAngle 온디바이스 시스템 초기화...")
+
+        self.useLegacySystem = enableLegacySystem
 
         // RTMPose (ONNX)
         if let rtmpose = RTMPoseRunner() {
@@ -39,8 +45,17 @@ class TryAngleOnDeviceAnalyzer {
         self.depthEstimator = DepthAnythingCoreML(modelType: .small)
         print("✅ Depth Anything CoreML 로드 완료")
 
+        // Grounding DINO (선택적 - 레거시 시스템)
+        if enableLegacySystem {
+            self.groundingDINO = GroundingDINOCoreML()
+            print("✅ Grounding DINO CoreML 로드 완료 (레거시 모드)")
+        } else {
+            self.groundingDINO = nil
+            print("ℹ️ 레거시 시스템 비활성화 (RTMPose만 사용)")
+        }
+
         // 피드백 생성기
-        self.feedbackGenerator = OnDeviceFeedbackGenerator()
+        self.feedbackGenerator = OnDeviceFeedbackGenerator(useLegacySystem: enableLegacySystem)
         print("✅ 피드백 생성기 초기화 완료")
 
         print("🎯 온디바이스 시스템 준비 완료!")
@@ -55,6 +70,7 @@ class TryAngleOnDeviceAnalyzer {
 
         var poseResult: RTMPoseResult?
         var depthResult: DepthResult?
+        var legacyBBox: CGRect?
 
         // 1. RTMPose 처리 (비동기)
         group.enter()
@@ -72,7 +88,17 @@ class TryAngleOnDeviceAnalyzer {
             group.leave()
         }
 
-        // 3. 모든 처리 완료 후 피드백 생성
+        // 3. Grounding DINO 처리 (레거시 모드일 때만)
+        if useLegacySystem, let groundingDINO = groundingDINO {
+            group.enter()
+            let ciImage = CIImage(image: image)!
+            groundingDINO.detectPerson(in: ciImage) { bbox in
+                legacyBBox = bbox
+                group.leave()
+            }
+        }
+
+        // 4. 모든 처리 완료 후 피드백 생성
         group.notify(queue: .main) { [weak self] in
             guard let self = self else { return }
 
@@ -80,10 +106,12 @@ class TryAngleOnDeviceAnalyzer {
             let processingTime = CFAbsoluteTimeGetCurrent() - startTime
             self.performanceStats.update(processingTime: processingTime)
 
-            // 피드백 생성
+            // 피드백 생성 (레거시 bbox 포함)
             let feedback = self.feedbackGenerator.generateFeedback(
                 pose: poseResult,
                 depth: depthResult,
+                legacyBBox: legacyBBox,
+                imageSize: image.size,
                 processingTime: processingTime
             )
 
@@ -125,38 +153,97 @@ class OnDeviceFeedbackGenerator {
 
     // 한국어 메시지
     private let messages = FeedbackMessages()
+    private let useLegacySystem: Bool
 
-    func generateFeedback(pose: RTMPoseResult?, depth: DepthResult?, processingTime: TimeInterval) -> TryAngleFeedback {
+    init(useLegacySystem: Bool = false) {
+        self.useLegacySystem = useLegacySystem
+    }
+
+    func generateFeedback(pose: RTMPoseResult?,
+                         depth: DepthResult?,
+                         legacyBBox: CGRect? = nil,
+                         imageSize: CGSize? = nil,
+                         processingTime: TimeInterval) -> TryAngleFeedback {
 
         var primary = ""
         var suggestions = [String]()
         var movement: MovementGuide?
+        var marginInfo: MarginInfo?
 
-        // 1. 포즈 기반 피드백
+        // 1. BBox 선택 (레거시 우선, 없으면 RTMPose)
+        let effectiveBBox: CGRect?
+        if let legacyBBox = legacyBBox {
+            effectiveBBox = legacyBBox
+            print("📐 레거시 BBox 사용")
+        } else if let pose = pose, let poseBBox = pose.boundingBox {
+            // RTMPose bbox를 normalized coordinates로 변환
+            effectiveBBox = CGRect(
+                x: poseBBox.origin.x / UIScreen.main.bounds.width,
+                y: poseBBox.origin.y / UIScreen.main.bounds.height,
+                width: poseBBox.width / UIScreen.main.bounds.width,
+                height: poseBBox.height / UIScreen.main.bounds.height
+            )
+            print("🤖 RTMPose BBox 사용")
+        } else {
+            effectiveBBox = nil
+            primary = "인물을 찾을 수 없습니다"
+        }
+
+        // 2. 여백 분석 (레거시 스타일)
+        if let bbox = effectiveBBox, let size = imageSize {
+            let margins = calculateLegacyMargins(bbox: bbox, imageSize: size)
+            marginInfo = margins
+
+            // 여백 피드백 생성
+            if margins.leftRatio < 0.05 {
+                suggestions.append("왼쪽 여백이 부족합니다")
+            } else if margins.leftRatio > 0.4 {
+                suggestions.append("왼쪽 여백이 너무 큽니다")
+            }
+
+            if margins.rightRatio < 0.05 {
+                suggestions.append("오른쪽 여백이 부족합니다")
+            } else if margins.rightRatio > 0.4 {
+                suggestions.append("오른쪽 여백이 너무 큽니다")
+            }
+
+            if margins.topRatio < 0.05 {
+                suggestions.append("상단 여백이 부족합니다")
+            } else if margins.topRatio > 0.3 {
+                suggestions.append("상단 여백이 너무 큽니다")
+            }
+
+            // 균형 체크
+            if margins.balanceScore < 0.6 {
+                primary = "구도 균형을 맞춰주세요"
+            } else if margins.balanceScore > 0.85 {
+                primary = "좋은 구도입니다!"
+            }
+        }
+
+        // 3. 포즈 기반 피드백 (RTMPose 키포인트)
         if let pose = pose {
             let poseFeedback = analyzePose(pose)
-            if let primaryPose = poseFeedback.primary {
+            if primary.isEmpty, let primaryPose = poseFeedback.primary {
                 primary = primaryPose
             }
             suggestions.append(contentsOf: poseFeedback.suggestions)
             movement = poseFeedback.movement
-        } else {
-            primary = "인물을 찾을 수 없습니다"
         }
 
-        // 2. 깊이 기반 피드백
+        // 4. 깊이 기반 피드백
         if let depth = depth {
             let depthFeedback = analyzeDepth(depth)
             suggestions.append(contentsOf: depthFeedback)
         }
 
-        // 3. 우선순위 정렬
+        // 5. 우선순위 정렬
         if suggestions.count > 3 {
             suggestions = Array(suggestions.prefix(3))
         }
 
         return TryAngleFeedback(
-            primary: primary,
+            primary: primary.isEmpty ? "카메라 위치 조정 중..." : primary,
             suggestions: suggestions,
             movement: movement,
             compressionInfo: depth.map { CompressionInfo(
@@ -164,8 +251,47 @@ class OnDeviceFeedbackGenerator {
                 cameraType: $0.cameraType.description,
                 suggestion: $0.cameraType.recommendation
             )},
+            marginInfo: marginInfo,
             processingTime: processingTime,
-            isOnDevice: true
+            isOnDevice: true,
+            usedLegacySystem: legacyBBox != nil
+        )
+    }
+
+    // MARK: - 레거시 여백 계산
+    private func calculateLegacyMargins(bbox: CGRect, imageSize: CGSize) -> MarginInfo {
+        // legacy_analyzer.py의 로직을 Swift로 포팅
+
+        let x = bbox.origin.x * imageSize.width
+        let y = bbox.origin.y * imageSize.height
+        let w = bbox.width * imageSize.width
+        let h = bbox.height * imageSize.height
+
+        let leftMargin = x
+        let rightMargin = imageSize.width - (x + w)
+        let topMargin = y
+        let bottomMargin = imageSize.height - (y + h)
+
+        let leftRatio = leftMargin / imageSize.width
+        let rightRatio = rightMargin / imageSize.width
+        let topRatio = topMargin / imageSize.height
+        let bottomRatio = bottomMargin / imageSize.height
+
+        // 균형 점수 계산 (레거시 스타일)
+        let horizontalBalance = 1.0 - abs(leftRatio - rightRatio)
+        let verticalBalance = 1.0 - abs(topRatio - bottomRatio * 0.5)  // 하단 2:1 비율
+        let balanceScore = (horizontalBalance + verticalBalance) / 2.0
+
+        return MarginInfo(
+            left: leftMargin,
+            right: rightMargin,
+            top: topMargin,
+            bottom: bottomMargin,
+            leftRatio: leftRatio,
+            rightRatio: rightRatio,
+            topRatio: topRatio,
+            bottomRatio: bottomRatio,
+            balanceScore: balanceScore
         )
     }
 
@@ -274,8 +400,10 @@ struct TryAngleFeedback {
     let suggestions: [String]
     let movement: MovementGuide?
     let compressionInfo: CompressionInfo?
+    let marginInfo: MarginInfo?  // 레거시 여백 정보
     let processingTime: TimeInterval
     let isOnDevice: Bool
+    let usedLegacySystem: Bool  // 레거시 시스템 사용 여부
 }
 
 struct MovementGuide {
@@ -288,6 +416,18 @@ struct CompressionInfo {
     let index: Float
     let cameraType: String
     let suggestion: String?
+}
+
+struct MarginInfo {
+    let left: CGFloat
+    let right: CGFloat
+    let top: CGFloat
+    let bottom: CGFloat
+    let leftRatio: CGFloat
+    let rightRatio: CGFloat
+    let topRatio: CGFloat
+    let bottomRatio: CGFloat
+    let balanceScore: CGFloat
 }
 
 struct ReferenceAnalysis {
