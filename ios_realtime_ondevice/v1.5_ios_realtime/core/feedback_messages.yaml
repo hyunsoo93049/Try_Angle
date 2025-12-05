@@ -1,0 +1,86 @@
+# TryAngle Feedback Messages Configuration
+# 작성일: 2025-12-05
+
+ko:
+  movement:
+    up: "위로 이동하세요"
+    down: "아래로 이동하세요"
+    left: "왼쪽으로 이동하세요"
+    right: "오른쪽으로 이동하세요"
+    forward: "앞으로 이동하세요"
+    backward: "뒤로 이동하세요"
+
+  composition:
+    center: "중앙에 위치시키세요"
+    rule_of_thirds: "3분할 선에 맞추세요"
+    golden_ratio: "황금비율에 맞추세요"
+    leading_space: "시선 방향에 공간을 두세요"
+
+  framing:
+    too_tight: "프레임이 너무 타이트합니다"
+    too_loose: "프레임이 너무 느슨합니다"
+    good: "좋은 프레이밍입니다"
+    crop_issue: "신체 일부가 잘렸습니다"
+
+  compression:
+    wide: "광각 렌즈 효과가 너무 강합니다"
+    telephoto: "망원 렌즈 효과가 너무 강합니다"
+    normal: "적절한 압축감입니다"
+
+  pose:
+    not_detected: "인물을 찾을 수 없습니다"
+    partial: "전신이 보이지 않습니다"
+    good: "포즈가 잘 보입니다"
+
+  margin:
+    top_small: "상단 여백이 부족합니다"
+    top_large: "상단 여백이 너무 큽니다"
+    bottom_small: "하단 여백이 부족합니다"
+    bottom_large: "하단 여백이 너무 큽니다"
+    left_small: "좌측 여백이 부족합니다"
+    left_large: "좌측 여백이 너무 큽니다"
+    right_small: "우측 여백이 부족합니다"
+    right_large: "우측 여백이 너무 큽니다"
+    balanced: "여백이 균형잡혀 있습니다"
+
+en:
+  movement:
+    up: "Move up"
+    down: "Move down"
+    left: "Move left"
+    right: "Move right"
+    forward: "Move forward"
+    backward: "Move backward"
+
+  composition:
+    center: "Center the subject"
+    rule_of_thirds: "Align with rule of thirds"
+    golden_ratio: "Follow golden ratio"
+    leading_space: "Add space in gaze direction"
+
+  framing:
+    too_tight: "Frame is too tight"
+    too_loose: "Frame is too loose"
+    good: "Good framing"
+    crop_issue: "Body parts are cropped"
+
+  compression:
+    wide: "Too much wide-angle distortion"
+    telephoto: "Too much telephoto compression"
+    normal: "Good compression"
+
+  pose:
+    not_detected: "Person not detected"
+    partial: "Full body not visible"
+    good: "Pose is well captured"
+
+  margin:
+    top_small: "Need more top margin"
+    top_large: "Too much top margin"
+    bottom_small: "Need more bottom margin"
+    bottom_large: "Too much bottom margin"
+    left_small: "Need more left margin"
+    left_large: "Too much left margin"
+    right_small: "Need more right margin"
+    right_large: "Too much right margin"
+    balanced: "Margins are balanced"
