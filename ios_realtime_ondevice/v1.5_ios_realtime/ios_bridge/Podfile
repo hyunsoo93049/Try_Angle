@@ -1,0 +1,25 @@
+# Podfile for TryAngle iOS
+# 작성일: 2025-12-05
+
+platform :ios, '15.0'
+use_frameworks!
+
+target 'TryAngleApp' do
+  # ONNX Runtime for RTMPose
+  pod 'onnxruntime-mobile-c', '~> 1.18.0'
+
+  # Optional: For better performance
+  pod 'onnxruntime-mobile-objc', '~> 1.18.0'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+
+      # CoreML 가속 활성화
+      config.build_settings['ONNXRUNTIME_ENABLE_COREML'] = 'YES'
+    end
+  end
+end

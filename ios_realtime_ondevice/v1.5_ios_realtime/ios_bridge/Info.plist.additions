@@ -1,0 +1,28 @@
+<!-- Info.plist에 추가할 권한 설정 -->
+<!-- 작성일: 2025-12-05 -->
+
+<key>NSCameraUsageDescription</key>
+<string>TryAngle이 사진 구도 분석을 위해 카메라 접근이 필요합니다.</string>
+
+<key>NSPhotoLibraryUsageDescription</key>
+<string>레퍼런스 이미지 선택을 위해 사진 라이브러리 접근이 필요합니다.</string>
+
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>분석 결과를 저장하기 위해 사진 라이브러리 접근이 필요합니다.</string>
+
+<!-- 성능 최적화 설정 -->
+<key>UIRequiresFullScreen</key>
+<true/>
+
+<key>UIStatusBarHidden</key>
+<true/>
+
+<key>UIViewControllerBasedStatusBarAppearance</key>
+<false/>
+
+<!-- Metal/GPU 사용 -->
+<key>PrefersOpenGL</key>
+<false/>
+
+<key>CADisableMinimumFrameDurationOnPhone</key>
+<true/>
