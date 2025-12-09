@@ -17,7 +17,7 @@ class TryAngleOnDeviceAnalyzer {
     // 모델들
     private let rtmposeRunner: RTMPoseRunner
     private let depthEstimator: DepthAnythingCoreML
-    private let groundingDINO: GroundingDINOCoreML?  // 레거시 시스템 (선택적)
+    private let personDetector: PersonDetector?  // 사람 검출기 (선택적)
 
     // 피드백 생성기
     private let feedbackGenerator: OnDeviceFeedbackGenerator
@@ -45,12 +45,12 @@ class TryAngleOnDeviceAnalyzer {
         self.depthEstimator = DepthAnythingCoreML(modelType: .small)
         print("✅ Depth Anything CoreML 로드 완료")
 
-        // Grounding DINO (선택적 - 레거시 시스템)
+        // Person Detector (선택적 - 레거시 시스템)
         if enableLegacySystem {
-            self.groundingDINO = GroundingDINOCoreML()
-            print("✅ Grounding DINO CoreML 로드 완료 (레거시 모드)")
+            self.personDetector = PersonDetector()
+            print("✅ Person Detector 로드 완료 (레거시 모드)")
         } else {
-            self.groundingDINO = nil
+            self.personDetector = nil
             print("ℹ️ 레거시 시스템 비활성화 (RTMPose만 사용)")
         }
 
@@ -88,11 +88,11 @@ class TryAngleOnDeviceAnalyzer {
             group.leave()
         }
 
-        // 3. Grounding DINO 처리 (레거시 모드일 때만)
-        if useLegacySystem, let groundingDINO = groundingDINO {
+        // 3. Person Detector 처리 (레거시 모드일 때만)
+        if useLegacySystem, let personDetector = personDetector {
             group.enter()
             let ciImage = CIImage(image: image)!
-            groundingDINO.detectPerson(in: ciImage) { bbox in
+            personDetector.detectPerson(in: ciImage) { bbox in
                 legacyBBox = bbox
                 group.leave()
             }

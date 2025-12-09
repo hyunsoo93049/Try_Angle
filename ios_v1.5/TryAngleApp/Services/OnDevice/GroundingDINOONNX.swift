@@ -25,9 +25,17 @@ class GroundingDINOONNX {
     // MARK: - 세션 상태
     private(set) var isSessionLoaded: Bool = false
 
+    // 로딩 완료 콜백
+    var onLoadingComplete: ((Bool) -> Void)?
+
     // MARK: - Initialization
-    init() {
-        setupONNXRuntime()
+    init(completion: ((Bool) -> Void)? = nil) {
+        self.onLoadingComplete = completion
+
+        // 🔥 [수정] 백그라운드에서 모델 로딩 (UI 블로킹 방지)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.setupONNXRuntime()
+        }
     }
 
     private func setupONNXRuntime() {
@@ -39,31 +47,82 @@ class GroundingDINOONNX {
             guard let modelPath = Bundle.main.path(forResource: "grounding_dino", ofType: "onnx") else {
                 print("❌ Grounding DINO ONNX 모델을 찾을 수 없습니다")
                 print("   Models/GroundingDINO/grounding_dino.onnx 경로를 확인하세요")
+                notifyLoadingComplete(success: false)
                 return
             }
 
-            // 세션 옵션
-            let sessionOptions = try ORTSessionOptions()
-            try sessionOptions.setGraphOptimizationLevel(.all)
-            try sessionOptions.setIntraOpNumThreads(4) // 스레드 최적화
-
-            // 🔥 [수정 2] CoreML Execution Provider 활성화 (GPU 가속)
-            do {
-                try sessionOptions.appendCoreMLExecutionProvider(with: .init())
-                print("✅ GroundingDINO: CoreML(GPU) 가속 활성화 성공")
-            } catch {
-                print("⚠️ GroundingDINO: CoreML 활성화 실패, CPU로 동작합니다. (Error: \(error))")
+            // 1차 시도: CoreML EP (GPU 가속)
+            if let session = tryCreateSessionWithCoreML(modelPath: modelPath) {
+                ortSession = session
+                isSessionLoaded = true
+                print("✅ Grounding DINO ONNX 모델 로드 성공 (CoreML GPU)")
+                print("   입력 크기: \(inputSize)x\(inputSize)")
+                notifyLoadingComplete(success: true)
+                return
             }
 
-            // 세션 생성
-            ortSession = try ORTSession(env: ortEnv!, modelPath: modelPath, sessionOptions: sessionOptions)
-            isSessionLoaded = true  // 성공 플래그
-            print("✅ Grounding DINO ONNX 모델 로드 성공")
-            print("   입력 크기: \(inputSize)x\(inputSize)")
+            // 2차 시도: CPU만 (CoreML 실패 시 폴백)
+            print("⚠️ CoreML EP 실패, CPU 모드로 재시도...")
+            if let session = tryCreateSessionCPUOnly(modelPath: modelPath) {
+                ortSession = session
+                isSessionLoaded = true
+                print("✅ Grounding DINO ONNX 모델 로드 성공 (CPU)")
+                print("   입력 크기: \(inputSize)x\(inputSize)")
+                notifyLoadingComplete(success: true)
+                return
+            }
+
+            // 둘 다 실패
+            isSessionLoaded = false
+            print("❌ Grounding DINO 모델 로드 완전 실패")
+            notifyLoadingComplete(success: false)
 
         } catch {
             isSessionLoaded = false
             print("❌ ONNX Runtime 설정 실패: \(error)")
+            notifyLoadingComplete(success: false)
+        }
+    }
+
+    // CoreML EP로 세션 생성 시도
+    private func tryCreateSessionWithCoreML(modelPath: String) -> ORTSession? {
+        do {
+            let sessionOptions = try ORTSessionOptions()
+            try sessionOptions.setGraphOptimizationLevel(.all)
+            try sessionOptions.setIntraOpNumThreads(4)
+
+            // CoreML EP 추가
+            try sessionOptions.appendCoreMLExecutionProvider(with: .init())
+
+            let session = try ORTSession(env: ortEnv!, modelPath: modelPath, sessionOptions: sessionOptions)
+            print("✅ GroundingDINO: CoreML(GPU) 가속 활성화 성공")
+            return session
+        } catch {
+            print("⚠️ CoreML EP 세션 생성 실패: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // CPU만으로 세션 생성
+    private func tryCreateSessionCPUOnly(modelPath: String) -> ORTSession? {
+        do {
+            let sessionOptions = try ORTSessionOptions()
+            try sessionOptions.setGraphOptimizationLevel(.all)
+            try sessionOptions.setIntraOpNumThreads(4)
+            // CoreML EP 없이 CPU만 사용
+
+            let session = try ORTSession(env: ortEnv!, modelPath: modelPath, sessionOptions: sessionOptions)
+            return session
+        } catch {
+            print("❌ CPU 세션 생성도 실패: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // 콜백 호출 헬퍼
+    private func notifyLoadingComplete(success: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onLoadingComplete?(success)
         }
     }
 

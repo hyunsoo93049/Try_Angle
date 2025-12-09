@@ -21,6 +21,7 @@
 		6C46BCC82EC9CA8B00C72C0F /* TryAngleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TryAngleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C55CD212EE7E7DA00B6A1B3 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6C726E762EC9CDB000DDA131 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6C7C90992EE806A800A92273 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B77A2ECD559F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B7D02ECD595F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
@@ -123,6 +124,11 @@
 			isa = PBXGroup;
 			children = (
 			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6C7C909B2EE806A800A92273 /* Products */ = {
+			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -305,6 +311,10 @@
 				{
 					ProductGroup = 6CE40FEE2ECD68E0003DE68C /* Products */;
 					ProjectRef = 6CE40FEB2ECD68E0003DE68C /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6C7C909B2EE806A800A92273 /* Products */;
+					ProjectRef = 6C7C90992EE806A800A92273 /* TryAngleApp.xcodeproj */;
 				},
 				{
 					ProductGroup = 6CEB45402EC9E4BF00809755 /* Products */;

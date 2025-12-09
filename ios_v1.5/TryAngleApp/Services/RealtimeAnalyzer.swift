@@ -127,7 +127,7 @@ class RealtimeAnalyzer: ObservableObject {
     // 🆕 v1.5 통합 Gate System (5단계)
     private let gateSystem = GateSystem.shared
     private let marginAnalyzer = MarginAnalyzer()
-    private let groundingDINO = GroundingDINOCoreML()  // 정밀 BBox (30프레임마다)
+    private let personDetector = PersonDetector()  // 정밀 BBox (30프레임마다)
     private let focalLengthEstimator = FocalLengthEstimator.shared  // 🆕 35mm 환산 초점거리
 
     // 🆕 v1.5 프레임 카운터 (Level 처리용)
@@ -417,7 +417,7 @@ class RealtimeAnalyzer: ObservableObject {
         var preciseBBox: CGRect?
         if let ciImage = CIImage(image: image) {
             let semaphore = DispatchSemaphore(value: 0)
-            groundingDINO.detectPerson(in: ciImage) { bbox in
+            personDetector.detectPerson(in: ciImage) { bbox in
                 preciseBBox = bbox
                 semaphore.signal()
             }
@@ -686,7 +686,7 @@ class RealtimeAnalyzer: ObservableObject {
             if let ciImage = CIImage(image: uiImage) {
                 // 🔥 Level 3 전용 백그라운드 큐에서 비동기 실행
                 PerformanceOptimizer.shared.level3Queue.async { [weak self] in
-                    self?.groundingDINO.detectPerson(in: ciImage) { bbox in
+                    self?.personDetector.detectPerson(in: ciImage) { bbox in
                         DispatchQueue.main.async {
                             // 🔧 FIX: nil일 때도 업데이트하여 캐시 stale 방지
                             self?.lastGroundingDINOBBox = bbox

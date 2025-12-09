@@ -274,8 +274,8 @@ class CameraManager: NSObject, ObservableObject {
 
     // 🆕 고화질 포맷 설정 (60fps 보장)
     private func configureHighQualityFormat(for device: AVCaptureDevice) {
-        // 60fps를 지원하는 포맷만 필터링
-        let targetFPS: Float64 = 60.0
+        // 📷 사진 모드와 동일한 4:3 화각 우선 (아이폰 기본 카메라와 동일)
+        // fps는 높을수록 좋지만 강제하지 않음
 
         let formats = device.formats.filter { format in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
@@ -285,32 +285,38 @@ class CameraManager: NSObject, ObservableObject {
             let isVideoFormat = mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
                                mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
 
-            // 최소 1080p 이상
+            // 최소 1080 높이 이상
             guard isVideoFormat && dimensions.height >= 1080 else { return false }
 
-            // 60fps 지원 여부 확인
-            let supports60fps = format.videoSupportedFrameRateRanges.contains { range in
-                range.minFrameRate <= targetFPS && range.maxFrameRate >= targetFPS
-            }
-
-            return supports60fps
+            return true
         }
 
-        // 해상도 기준으로 정렬 (높은 것 우선, 하지만 1080p 선호)
-        // 4K는 처리 부하가 크므로 1080p가 최적
+        // 4:3 비율 우선 정렬
         let sortedFormats = formats.sorted { f1, f2 in
             let d1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription)
             let d2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription)
 
-            // 1080p (1920x1080)를 우선 선택
-            let is1080p_1 = d1.height == 1080 || d1.width == 1920
-            let is1080p_2 = d2.height == 1080 || d2.width == 1920
+            // 4:3 비율 체크 (허용 오차 0.01)
+            let ratio1 = Float(d1.width) / Float(d1.height)
+            let ratio2 = Float(d2.width) / Float(d2.height)
+            let is4to3_1 = abs(ratio1 - 4.0/3.0) < 0.01
+            let is4to3_2 = abs(ratio2 - 4.0/3.0) < 0.01
 
-            if is1080p_1 && !is1080p_2 { return true }
-            if !is1080p_1 && is1080p_2 { return false }
+            // 4:3 비율 우선
+            if is4to3_1 && !is4to3_2 { return true }
+            if !is4to3_1 && is4to3_2 { return false }
 
-            // 같은 등급이면 해상도 높은 것 선택
-            return d1.width * d1.height > d2.width * d2.height
+            // 같은 비율이면 해상도로 비교 (너무 높지 않은 것 선호)
+            // 4K(4032x3024)는 처리 부하가 크므로 적당한 해상도 선호
+            let pixels1 = Int(d1.width) * Int(d1.height)
+            let pixels2 = Int(d2.width) * Int(d2.height)
+
+            // 약 3~4백만 픽셀 (2048x1536 등) 근처가 최적
+            let optimal = 3_000_000
+            let diff1 = abs(pixels1 - optimal)
+            let diff2 = abs(pixels2 - optimal)
+
+            return diff1 < diff2
         }
 
         if let bestFormat = sortedFormats.first {
@@ -318,26 +324,33 @@ class CameraManager: NSObject, ObservableObject {
                 try device.lockForConfiguration()
                 device.activeFormat = bestFormat
 
-                // 60fps 설정
-                device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 60)
-                device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 60)
+                // 가능한 최대 fps 설정 (강제하지 않음)
+                if let maxFPSRange = bestFormat.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
+                    let targetFPS = min(maxFPSRange.maxFrameRate, 60.0)  // 최대 60fps
+                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                }
 
                 device.unlockForConfiguration()
 
                 let dimensions = CMVideoFormatDescriptionGetDimensions(bestFormat.formatDescription)
+                let ratio = Float(dimensions.width) / Float(dimensions.height)
                 let maxFPS = bestFormat.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
-                print("📷 포맷 설정: \(dimensions.width)x\(dimensions.height) @ 60fps (최대 \(Int(maxFPS))fps 지원)")
+                let ratioStr = abs(ratio - 4.0/3.0) < 0.01 ? "4:3" : String(format: "%.2f:1", ratio)
+                print("📷 포맷 설정: \(dimensions.width)x\(dimensions.height) (\(ratioStr)) @ \(Int(maxFPS))fps")
             } catch {
                 print("❌ 포맷 설정 실패: \(error)")
-                if session.canSetSessionPreset(.hd1920x1080) {
-                    session.sessionPreset = .hd1920x1080
+                // fallback: .photo preset (4:3)
+                if session.canSetSessionPreset(.photo) {
+                    session.sessionPreset = .photo
+                    print("📷 기본 preset 사용: .photo (4:3)")
                 }
             }
         } else {
-            // 적합한 포맷이 없으면 1080p preset 사용
-            if session.canSetSessionPreset(.hd1920x1080) {
-                session.sessionPreset = .hd1920x1080
-                print("📷 기본 preset 사용: 1920x1080")
+            // 적합한 포맷이 없으면 .photo preset 사용 (4:3)
+            if session.canSetSessionPreset(.photo) {
+                session.sessionPreset = .photo
+                print("📷 기본 preset 사용: .photo (4:3)")
             }
         }
     }
@@ -807,26 +820,117 @@ class CameraManager: NSObject, ObservableObject {
         // 세션 재구성
         session.beginConfiguration()
 
-        // 비율에 따라 적절한 preset 설정
-        switch ratio {
-        case .ratio16_9:
-            if session.canSetSessionPreset(.hd1920x1080) {
-                session.sessionPreset = .hd1920x1080
-            }
-        case .ratio4_3:
-            if session.canSetSessionPreset(.photo) {
-                session.sessionPreset = .photo
-            }
-        case .ratio1_1:
-            // 1:1은 별도 preset이 없으므로 .photo 사용 후 크롭
-            if session.canSetSessionPreset(.photo) {
-                session.sessionPreset = .photo
-            }
+        // 현재 카메라로 해당 비율에 맞는 포맷 설정
+        if let camera = currentCamera {
+            configureFormatForAspectRatio(ratio, device: camera)
         }
 
         session.commitConfiguration()
 
         print("📷 Camera aspect ratio changed to: \(ratio.rawValue)")
+    }
+
+    // 비율에 맞는 포맷 설정
+    private func configureFormatForAspectRatio(_ ratio: CameraAspectRatio, device: AVCaptureDevice) {
+        let targetRatio: Float
+        switch ratio {
+        case .ratio16_9: targetRatio = 16.0 / 9.0
+        case .ratio4_3: targetRatio = 4.0 / 3.0
+        case .ratio1_1: targetRatio = 4.0 / 3.0  // 1:1은 4:3에서 크롭
+        }
+
+        let formats = device.formats.filter { format in
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let mediaType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+
+            let isVideoFormat = mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
+                               mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+
+            guard isVideoFormat && dimensions.height >= 1080 else { return false }
+
+            // 해당 비율과 일치하는지 확인
+            let formatRatio = Float(dimensions.width) / Float(dimensions.height)
+            return abs(formatRatio - targetRatio) < 0.01
+        }
+
+        // 적당한 해상도 선호 (3~4백만 픽셀)
+        let sortedFormats = formats.sorted { f1, f2 in
+            let d1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription)
+            let d2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription)
+
+            let pixels1 = Int(d1.width) * Int(d1.height)
+            let pixels2 = Int(d2.width) * Int(d2.height)
+
+            let optimal = 3_000_000
+            return abs(pixels1 - optimal) < abs(pixels2 - optimal)
+        }
+
+        if let bestFormat = sortedFormats.first {
+            do {
+                try device.lockForConfiguration()
+                device.activeFormat = bestFormat
+
+                // 가능한 최대 fps
+                if let maxFPSRange = bestFormat.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
+                    let fps = min(maxFPSRange.maxFrameRate, 60.0)
+                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+                }
+
+                device.unlockForConfiguration()
+
+                let dimensions = CMVideoFormatDescriptionGetDimensions(bestFormat.formatDescription)
+                let maxFPS = bestFormat.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+                print("📷 포맷 변경: \(dimensions.width)x\(dimensions.height) (\(ratio.rawValue)) @ \(Int(maxFPS))fps")
+            } catch {
+                print("❌ 포맷 변경 실패: \(error)")
+            }
+        } else {
+            // fallback: preset 사용
+            switch ratio {
+            case .ratio16_9:
+                if session.canSetSessionPreset(.hd1920x1080) {
+                    session.sessionPreset = .hd1920x1080
+                }
+            case .ratio4_3, .ratio1_1:
+                if session.canSetSessionPreset(.photo) {
+                    session.sessionPreset = .photo
+                }
+            }
+            print("📷 preset fallback: \(ratio.rawValue)")
+        }
+    }
+    
+    // MARK: - Focus & Exposure Control (탭 투 포커스) 🔥 추가됨 🔥
+
+    /// 특정 좌표(0.0 ~ 1.0)에 초점 및 노출 맞추기
+    func setFocus(at point: CGPoint) {
+        guard let device = currentCamera else { return }
+
+        do {
+            try device.lockForConfiguration()
+
+            // 1. 초점(Focus) 설정
+            if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.autoFocus) {
+                device.focusPointOfInterest = point
+                device.focusMode = .autoFocus
+            }
+
+            // 2. 노출(Exposure) 설정 (밝기 조절)
+            if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
+                device.exposurePointOfInterest = point
+                device.exposureMode = .autoExpose
+            }
+
+            // 3. 피사체 변경 감지 (카메라를 심하게 움직이면 다시 오토포커스로 전환)
+            device.isSubjectAreaChangeMonitoringEnabled = true
+
+            device.unlockForConfiguration()
+            print("🎯 포커스/노출 설정 완료: \(point)")
+
+        } catch {
+            print("❌ 포커스 설정 실패: \(error)")
+        }
     }
 }
 

@@ -1,41 +1,51 @@
-// GroundingDINOCoreML.swift
-// Grounding DINO 통합 인터페이스
-// ONNX Runtime 사용 + Vision Framework 폴백
+// PersonDetector.swift
+// 사람 검출 통합 인터페이스
+// Grounding DINO (ONNX Runtime) + Vision Framework 폴백
 // 작성일: 2025-12-05
-// 수정일: 2025-12-06 - ONNX Runtime 지원 추가
+// 수정일: 2025-12-09 - 파일명 변경 (GroundingDINOCoreML → PersonDetector)
 
 import CoreML
 import Vision
 import CoreImage
 
-class GroundingDINOCoreML {
+class PersonDetector {
 
     // ONNX 모델 인스턴스
     private var onnxModel: GroundingDINOONNX?
     private var useONNX: Bool = false
+    private var isLoading: Bool = true
 
     // MARK: - Initialization
     init() {
-        // ONNX 모델 초기화 시도
-        let onnx = GroundingDINOONNX()
+        print("🔄 Grounding DINO ONNX 모델 로딩 시작 (백그라운드)...")
 
-        // ONNX 세션이 실제로 로드되었는지 확인
-        if onnx.isSessionLoaded {
-            onnxModel = onnx
-            useONNX = true
-            print("✅ Grounding DINO 초기화 완료 (ONNX Runtime)")
-        } else {
-            onnxModel = nil
-            useONNX = false
-            print("⚠️ ONNX 세션 로드 실패, Vision Framework 폴백 사용")
+        // ONNX 모델 초기화 (백그라운드에서 로딩됨)
+        let onnx = GroundingDINOONNX { [weak self] success in
+            guard let self = self else { return }
+
+            self.isLoading = false
+
+            if success {
+                self.useONNX = true
+                print("✅ Grounding DINO 초기화 완료 (ONNX Runtime)")
+            } else {
+                self.useONNX = false
+                print("⚠️ ONNX 세션 로드 실패, Vision Framework 폴백 사용")
+            }
         }
+
+        onnxModel = onnx
     }
 
     // MARK: - Person Detection
     func detectPerson(in image: CIImage, completion: @escaping (CGRect?) -> Void) {
-        if useONNX, let onnx = onnxModel {
+        // 로딩 중이면 ONNX 모델의 isSessionLoaded를 직접 체크
+        if let onnx = onnxModel, onnx.isSessionLoaded {
             // ONNX Runtime 사용
             onnx.detectPerson(in: image, completion: completion)
+        } else if isLoading {
+            // 아직 로딩 중이면 Vision Framework로 일단 처리
+            detectPersonWithVision(in: image, completion: completion)
         } else {
             // Vision Framework 폴백
             detectPersonWithVision(in: image, completion: completion)
@@ -76,7 +86,8 @@ class GroundingDINOCoreML {
 
     // MARK: - Multiple Person Detection
     func detectAllPersons(in image: CIImage, completion: @escaping ([Detection]) -> Void) {
-        if useONNX, let onnx = onnxModel {
+        // 로딩 중이면 ONNX 모델의 isSessionLoaded를 직접 체크
+        if let onnx = onnxModel, onnx.isSessionLoaded {
             onnx.detectAllPersons(in: image, completion: completion)
         } else {
             detectAllPersonsWithVision(in: image, completion: completion)
@@ -132,12 +143,15 @@ class GroundingDINOCoreML {
 
     // MARK: - Model Info
     var isUsingONNX: Bool {
-        return useONNX
+        // 실제 로드 상태 확인
+        return onnxModel?.isSessionLoaded ?? false
     }
 
     var modelDescription: String {
-        if useONNX {
+        if isUsingONNX {
             return "Grounding DINO (ONNX Runtime)"
+        } else if isLoading {
+            return "Grounding DINO (로딩 중...)"
         } else {
             return "Vision Framework (VNDetectHumanRectanglesRequest)"
         }
@@ -152,7 +166,7 @@ struct Detection {
 }
 
 // MARK: - Legacy System Port
-extension GroundingDINOCoreML {
+extension PersonDetector {
 
     // legacy_analyzer.py의 calculate_margins를 Swift로 포팅
     func calculateMargins(personBBox: CGRect, imageSize: CGSize) -> MarginAnalysis {
