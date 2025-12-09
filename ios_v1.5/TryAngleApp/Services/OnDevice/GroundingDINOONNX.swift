@@ -1,6 +1,6 @@
 // GroundingDINOONNX.swift
-// Grounding DINO ONNX Runtime 구현
-// 작성일: 2025-12-06
+// Grounding DINO ONNX Runtime 구현 (최적화 버전)
+// 수정일: 2025-12-09
 
 import Foundation
 import CoreImage
@@ -13,6 +13,10 @@ class GroundingDINOONNX {
     private var ortSession: ORTSession?
     private var ortEnv: ORTEnv?
     private let inputSize = 800  // Grounding DINO 입력 크기
+
+    // 🔥 [수정 1] CIContext를 클래스 멤버로 선언하여 재사용 (성능 최적화 & 발열 감소)
+    // useSoftwareRenderer: false로 설정하여 가능한 경우 GPU를 사용하도록 유도
+    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
     // "person" 토큰 (BERT tokenizer)
     // [CLS] person [SEP] = [101, 2711, 102]
@@ -41,9 +45,15 @@ class GroundingDINOONNX {
             // 세션 옵션
             let sessionOptions = try ORTSessionOptions()
             try sessionOptions.setGraphOptimizationLevel(.all)
+            try sessionOptions.setIntraOpNumThreads(4) // 스레드 최적화
 
-            // CoreML Execution Provider 사용 (가능한 경우)
-            // try sessionOptions.appendCoreMLExecutionProvider(with: .init())
+            // 🔥 [수정 2] CoreML Execution Provider 활성화 (GPU 가속)
+            do {
+                try sessionOptions.appendCoreMLExecutionProvider(with: .init())
+                print("✅ GroundingDINO: CoreML(GPU) 가속 활성화 성공")
+            } catch {
+                print("⚠️ GroundingDINO: CoreML 활성화 실패, CPU로 동작합니다. (Error: \(error))")
+            }
 
             // 세션 생성
             ortSession = try ORTSession(env: ortEnv!, modelPath: modelPath, sessionOptions: sessionOptions)
@@ -113,9 +123,11 @@ class GroundingDINOONNX {
         }
     }
 
-    // MARK: - Image Preprocessing (🔥 Accelerate 최적화)
+    // MARK: - Image Preprocessing (🔥 Accelerate 최적화 + CIContext 재사용)
     private func preprocessImage(_ image: CIImage) -> [Float] {
-        let context = CIContext()
+        // 🔥 [수정 3] 클래스 멤버 ciContext 사용 (매번 생성하지 않음)
+        let context = self.ciContext
+        
         let pixelCount = inputSize * inputSize
 
         // 800x800으로 리사이즈
@@ -291,7 +303,7 @@ class GroundingDINOONNX {
 
             // 최고 confidence person 찾기
             let numQueries = 900  // Grounding DINO default
-            var bestScore: Float = 0.6  // 🔧 threshold 0.5 → 0.6 (더 엄격하게)
+            var bestScore: Float = 0.6  // threshold
             var bestBox: CGRect?
 
             for i in 0..<numQueries {

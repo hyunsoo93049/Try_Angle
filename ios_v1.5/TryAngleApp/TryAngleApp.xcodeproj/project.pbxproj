@@ -17,7 +17,9 @@
 		6C0588182EE512220037603D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6C0588F92EE517BB0037603D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6C0589DE2EE55CC40037603D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
+		6C058B8A2EE7E12C0037603D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6C46BCC82EC9CA8B00C72C0F /* TryAngleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TryAngleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6C55CD212EE7E7DA00B6A1B3 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6C726E762EC9CDB000DDA131 /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
 		6CD9B77A2ECD559F00CC618D /* TryAngleApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = TryAngleApp.xcodeproj; sourceTree = "<group>"; };
@@ -89,6 +91,11 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		6C058B8C2EE7E12C0037603D /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 		6C46BCBF2EC9CA8B00C72C0F = {
 			isa = PBXGroup;
 			children = (
@@ -104,6 +111,11 @@
 			children = (
 				6C46BCC82EC9CA8B00C72C0F /* TryAngleApp.app */,
 			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6C55CD232EE7E7DA00B6A1B3 /* Products */ = {
+			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -259,6 +271,10 @@
 					ProjectRef = 6CE414922ECF8502003DE68C /* TryAngleApp.xcodeproj */;
 				},
 				{
+					ProductGroup = 6C058B8C2EE7E12C0037603D /* Products */;
+					ProjectRef = 6C058B8A2EE7E12C0037603D /* TryAngleApp.xcodeproj */;
+				},
+				{
 					ProductGroup = 6CE41A4C2ED59BB0003DE68C /* Products */;
 					ProjectRef = 6CE41A482ED59BB0003DE68C /* TryAngleApp.xcodeproj */;
 				},
@@ -329,6 +345,10 @@
 				{
 					ProductGroup = 6CD9B7222ECCB1AF00CC618D /* Products */;
 					ProjectRef = 6CD9B7202ECCB1AF00CC618D /* TryAngleApp.xcodeproj */;
+				},
+				{
+					ProductGroup = 6C55CD232EE7E7DA00B6A1B3 /* Products */;
+					ProjectRef = 6C55CD212EE7E7DA00B6A1B3 /* TryAngleApp.xcodeproj */;
 				},
 				{
 					ProductGroup = 6C0589E02EE55CC40037603D /* Products */;
