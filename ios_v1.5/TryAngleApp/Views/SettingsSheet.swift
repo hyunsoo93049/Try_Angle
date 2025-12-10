@@ -6,11 +6,16 @@ struct SettingsSheet: View {
     @Binding var autoCapture: Bool
     @Environment(\.dismiss) var dismiss
 
+    // 🆕 로컬 상태 (UI 반응성 최적화: Parent 리렌더링 방지)
+    @State private var localShowGrid: Bool = false
+    @State private var localShowFPS: Bool = false
+    @State private var localAutoCapture: Bool = true
+
     var body: some View {
         NavigationView {
             List {
                 Section {
-                    Toggle(isOn: $showGrid) {
+                    Toggle(isOn: $localShowGrid) {
                         HStack {
                             Image(systemName: "grid")
                                 .foregroundColor(.blue)
@@ -19,7 +24,7 @@ struct SettingsSheet: View {
                         }
                     }
 
-                    Toggle(isOn: $autoCapture) {
+                    Toggle(isOn: $localAutoCapture) {
                         HStack {
                             Image(systemName: "camera.fill")
                                 .foregroundColor(.blue)
@@ -32,7 +37,7 @@ struct SettingsSheet: View {
                 }
 
                 Section {
-                    Toggle(isOn: $showFPS) {
+                    Toggle(isOn: $localShowFPS) {
                         HStack {
                             Image(systemName: "speedometer")
                                 .foregroundColor(.blue)
@@ -61,9 +66,19 @@ struct SettingsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("완료") {
+                        // 🆕 변경사항 한 번에 적용
+                        showGrid = localShowGrid
+                        showFPS = localShowFPS
+                        autoCapture = localAutoCapture
                         dismiss()
                     }
                 }
+            }
+            .onAppear {
+                // 🆕 초기값 동기화
+                localShowGrid = showGrid
+                localShowFPS = showFPS
+                localAutoCapture = autoCapture
             }
         }
     }
