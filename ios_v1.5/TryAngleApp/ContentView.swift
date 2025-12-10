@@ -503,6 +503,24 @@ struct ContentView: View {
                 )
             }
         }
+        // 🆕 시트/커버 열릴 때 분석 일시 중지 (UI 반응성 확보)
+        .onChange(of: showSettings) { isShown in
+            if isShown {
+                print("⚙️ 설정 열림: 분석 일시 중지")
+                realtimeAnalyzer.pauseAnalysis()
+            } else if isActiveTab {
+                print("⚙️ 설정 닫힘: 분석 재개")
+                realtimeAnalyzer.resumeAnalysis()
+            }
+        }
+        .onChange(of: showQuickFeedback) { isShown in
+            if isShown { realtimeAnalyzer.pauseAnalysis() }
+            else if isActiveTab && !showDetailedAnalysis { realtimeAnalyzer.resumeAnalysis() }
+        }
+        .onChange(of: showDetailedAnalysis) { isShown in
+            if isShown { realtimeAnalyzer.pauseAnalysis() }
+            else if isActiveTab { realtimeAnalyzer.resumeAnalysis() }
+        }
         // 🆕 ScenePhase Handling (Replaces NotificationCenter)
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .active {

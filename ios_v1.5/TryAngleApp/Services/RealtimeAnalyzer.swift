@@ -181,6 +181,12 @@ class RealtimeAnalyzer: ObservableObject {
         analysisQueue.async { [weak self] in
             guard let self = self else { return }
             
+            // 🔥 Queue 대기 중 Pause 되었으면 취소 + Flag 리셋
+            if self.isPaused {
+                self.resetAnalyzingFlag()
+                return
+            }
+            
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(buffer) else {
                 self.resetAnalyzingFlag()
                 return
