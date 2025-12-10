@@ -34,6 +34,9 @@ class CameraManager: NSObject, ObservableObject {
 
     // 🆕 현재 활성화된 물리 렌즈 (상태 표시용)
     @Published var currentLens: CameraLensType = .wide
+    
+    // 🆕 세션 설정 완료 상태 (Preview Layer 연결 타이밍 제어)
+    @Published var isSessionConfigured: Bool = false
 
     // 🆕 UI에 표시할 줌 버튼 리스트 (기기별 자동 생성)
     @Published var zoomButtons: [CGFloat] = [1.0]
@@ -132,6 +135,7 @@ class CameraManager: NSObject, ObservableObject {
 
             // 🔥 설정 완료 후 콜백 호출
             DispatchQueue.main.async {
+                self.isSessionConfigured = true  // 🆕 Preview Layer 연결 허용
                 completion?()
             }
         }
