@@ -873,7 +873,11 @@ extension ContentView {
         ZStack {
             // 1. 카메라 프리뷰 & 마스크
             ZStack {
-                CameraView(cameraManager: cameraManager)
+                CameraView(
+                    cameraManager: cameraManager,
+                    isSessionConfigured: cameraManager.isSessionConfigured,
+                    aspectRatio: selectedAspectRatio
+                )
                     .ignoresSafeArea()
 
                 AspectRatioMaskView(selectedRatio: selectedAspectRatio)
