@@ -961,7 +961,8 @@ extension ContentView {
                     gateEvaluation: realtimeAnalyzer.gateEvaluation,
                     unifiedFeedback: realtimeAnalyzer.unifiedFeedback,
                     stabilityProgress: realtimeAnalyzer.stabilityProgress,
-                    environmentWarning: realtimeAnalyzer.environmentWarning
+                    environmentWarning: realtimeAnalyzer.environmentWarning,
+                    currentShotDebugInfo: realtimeAnalyzer.currentShotDebugInfo
                 )
                 .frame(height: captureHeight)
                 .clipped()
