@@ -154,85 +154,157 @@ enum ShotTypeGate: Int, CaseIterable {
         return .extremeCloseUp
     }
 
-    /// 🆕 키포인트 기반 샷타입 판별 (Robust Version)
-    /// - confidenceThreshold 0.5 -> 0.3 (완화)
-    /// - Edge Heuristic: 무릎/골반이 하단에 위치하면 한 단계 더 넓은 샷으로 간주 (e.g. Low Knees -> Medium Full)
+    /// 🔥 v6 (Python framing_analyzer.py 로직 이식)
+    /// 핵심: 가장 낮은 보이는 신체 부위(lowest_part)를 순차 탐색하는 방식
+    /// - 팔꿈치 유무로 medium_shot vs bust_shot 정확히 구분
+    /// - 얼굴 랜드마크 개수로 closeup vs mediumCloseUp 구분
     static func fromKeypoints(_ keypoints: [PoseKeypoint], confidenceThreshold: Float = 0.3) -> ShotTypeGate {
         guard keypoints.count >= 17 else {
             return .mediumShot
         }
 
-        // Helper: Is Visible & Valid (Custom Threshold Support)
+        // Helper: Is Visible & Valid
         func isVisible(_ idx: Int, threshold: Float = confidenceThreshold) -> Bool {
             guard idx < keypoints.count else { return false }
             let kp = keypoints[idx]
             return kp.confidence > threshold &&
-                   kp.location.y >= 0.0 && kp.location.y <= 1.05 
+                   kp.location.y >= 0.0 && kp.location.y <= 1.05
         }
 
-        // Visibility Checks (Stricter for Lower Body to prevent False Positives)
-        let strictThreshold: Float = 0.5
-        
-        let hasAnkles = isVisible(15, threshold: strictThreshold) || isVisible(16, threshold: strictThreshold)
-        
-        // Feet (17-22)
-        let hasFeet = keypoints.count > 22 && (17...22).contains(where: { isVisible($0, threshold: strictThreshold) })
+        // 🔥 v6 핵심: 가장 낮은 보이는 신체 부위 찾기 (Python의 lowest_part 로직)
+        var lowestY: CGFloat = 0.0
+        var lowestPart = "face"
 
-        let hasKnees = isVisible(13) || isVisible(14)
-        let hasHips = isVisible(11) || isVisible(12)
-        let hasElbows = isVisible(7) || isVisible(8)
-        let hasShoulders = isVisible(5) || isVisible(6)
-        
-        func getMaxY(_ indices: [Int]) -> CGFloat {
-            return indices.compactMap { idx -> CGFloat? in
-                guard idx < keypoints.count, isVisible(idx) else { return nil }
-                return keypoints[idx].location.y
-            }.max() ?? 0.0
-        }
-        
-        // Face Count
-        let faceKeypointCount = keypoints.count > 90 ? (23...90).filter { isVisible($0) }.count : 0
-        
-        // 🆕 Edge Heuristics
-        let kneeMaxY = getMaxY([13, 14])
-        let hipMaxY = getMaxY([11, 12])
-        
-        // Decision Tree (More Precise)
-        if hasAnkles || hasFeet {
-            return .fullShot
-        } else if hasKnees {
-             // Knees visible -> Wider than American Shot (Mid-Thigh)
-             // If knees are very low (near bottom), it is Medium Full Shot (Shins/Knees)
-             return .mediumFullShot
-        } else if hasHips {
-            // Hips visible (Waist detected)
-            // Distinguish American (Mid-Thigh) vs Medium (Waist)
-            // Use Hip Y position:
-            // - If Hips are high (< 0.8), we see significant thigh -> American Shot
-            // - If Hips are low (> 0.8), we cut right below waist -> Medium Shot
-            
-            // 🔧 Use Hip MaxY and Sanity Check
-            if hipMaxY < 0.8 {
-                return .americanShot
-            } else {
-                return .mediumShot
+        // 체크할 부위들 (순서대로: 얼굴 → 어깨 → 팔꿈치 → 엉덩이 → 무릎 → 발목)
+        let checkParts: [(name: String, indices: [Int])] = [
+            ("face", [0]),              // 코
+            ("shoulder", [5, 6]),       // 어깨
+            ("elbow", [7, 8]),          // 팔꿈치
+            ("hip", [11, 12]),          // 엉덩이
+            ("knee", [13, 14]),         // 무릎
+            ("ankle", [15, 16])         // 발목
+        ]
+
+        // 각 부위별로 가장 낮은 Y 좌표 찾기
+        for (partName, indices) in checkParts {
+            for idx in indices {
+                if isVisible(idx) {
+                    let y = keypoints[idx].location.y
+                    if y > lowestY {
+                        lowestY = y
+                        lowestPart = partName
+                    }
+                }
             }
-        } else if hasElbows {
-            // Elbows visible -> Chest/Bust visible -> Medium Close Up
-            // Check Shoulder Y for robustness?
+        }
+
+        // 발 키포인트 별도 체크 (17-22, 엄격한 임계값)
+        let hasFeet = keypoints.count > 22 &&
+                      (17...22).contains(where: { isVisible($0, threshold: 0.5) })
+
+        // 얼굴 키포인트 개수 (23-90)
+        let faceCount = keypoints.count > 90 ?
+                        (23...90).filter { isVisible($0) }.count : 0
+
+        // 🔥 v6 방식: 최하단 부위로 샷타입 결정
+        if lowestPart == "ankle" || hasFeet {
+            // 발목이나 발이 보임 → 전신샷
+            return .fullShot
+
+        } else if lowestPart == "knee" {
+            // 무릎이 최하단 → 무릎샷
+            return .mediumFullShot
+
+        } else if lowestPart == "hip" {
+            // 🔥 v6 핵심: 팔꿈치 유무로 medium vs american 구분
+            let hasElbows = isVisible(7) || isVisible(8)
+            if hasElbows {
+                // 엉덩이 + 팔꿈치 보임 → 미디엄샷 (허리샷)
+                return .mediumShot
+            } else {
+                // 엉덩이만 보임 → 아메리칸샷 (허벅지샷)
+                return .americanShot
+            }
+
+        } else if lowestPart == "elbow" {
+            // 팔꿈치가 최하단 → 바스트샷
             return .mediumCloseUp
-        } else if hasShoulders {
-             // Shoulders visible but no elbows -> Tight bust or Close Up
-             // If face is dominant -> Close Up
-            if faceKeypointCount > 50 {
+
+        } else if lowestPart == "shoulder" {
+            // 🔥 v6 방식: 얼굴 랜드마크 개수로 구분
+            if faceCount > 50 {
+                // 어깨 + 많은 얼굴 랜드마크 → 클로즈업
                 return .closeUp
             } else {
+                // 어깨만 보임 → 바스트샷
                 return .mediumCloseUp
             }
+
         } else {
+            // 얼굴만 보임 → 익스트림 클로즈업
             return .extremeCloseUp
         }
     }
+
+    /* ============================================
+     * 🗄️ 기존 로직 백업 (v5)
+     * ============================================
+     *
+     * static func fromKeypoints(_ keypoints: [PoseKeypoint], confidenceThreshold: Float = 0.3) -> ShotTypeGate {
+     *     guard keypoints.count >= 17 else {
+     *         return .mediumShot
+     *     }
+     *
+     *     func isVisible(_ idx: Int, threshold: Float = confidenceThreshold) -> Bool {
+     *         guard idx < keypoints.count else { return false }
+     *         let kp = keypoints[idx]
+     *         return kp.confidence > threshold &&
+     *                kp.location.y >= 0.0 && kp.location.y <= 1.05
+     *     }
+     *
+     *     let strictThreshold: Float = 0.5
+     *     let hasAnkles = isVisible(15, threshold: strictThreshold) || isVisible(16, threshold: strictThreshold)
+     *     let hasFeet = keypoints.count > 22 && (17...22).contains(where: { isVisible($0, threshold: strictThreshold) })
+     *     let hasKnees = isVisible(13) || isVisible(14)
+     *     let hasHips = isVisible(11) || isVisible(12)
+     *     let hasElbows = isVisible(7) || isVisible(8)
+     *     let hasShoulders = isVisible(5) || isVisible(6)
+     *
+     *     func getMaxY(_ indices: [Int]) -> CGFloat {
+     *         return indices.compactMap { idx -> CGFloat? in
+     *             guard idx < keypoints.count, isVisible(idx) else { return nil }
+     *             return keypoints[idx].location.y
+     *         }.max() ?? 0.0
+     *     }
+     *
+     *     let faceKeypointCount = keypoints.count > 90 ? (23...90).filter { isVisible($0) }.count : 0
+     *     let kneeMaxY = getMaxY([13, 14])
+     *     let hipMaxY = getMaxY([11, 12])
+     *
+     *     if hasAnkles || hasFeet {
+     *         return .fullShot
+     *     } else if hasKnees {
+     *          return .mediumFullShot
+     *     } else if hasHips {
+     *         if hipMaxY < 0.8 {
+     *             return .americanShot
+     *         } else {
+     *             return .mediumShot
+     *         }
+     *     } else if hasElbows {
+     *         return .mediumCloseUp
+     *     } else if hasShoulders {
+     *         if faceKeypointCount > 50 {
+     *             return .closeUp
+     *         } else {
+     *             return .mediumCloseUp
+     *         }
+     *     } else {
+     *         return .extremeCloseUp
+     *     }
+     * }
+     * ============================================
+     */
 
     /// 두 샷 타입 간 거리 (0~7)
     func distance(to other: ShotTypeGate) -> Int {
