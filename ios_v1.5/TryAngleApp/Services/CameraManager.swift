@@ -77,11 +77,11 @@ class CameraManager: NSObject, ObservableObject {
     private var baseFocalLength35mm: CGFloat = 24.0
 
     // MARK: - Preview Layer
-    var previewLayer: AVCaptureVideoPreviewLayer {
+    lazy var previewLayer: AVCaptureVideoPreviewLayer = {
         let layer = AVCaptureVideoPreviewLayer(session: session)
         layer.videoGravity = .resizeAspect // 🔥 중요: Fill 대신 Aspect로 변경하여 4:3 전체 영역 표시 (WYSIWYG)
         return layer
-    }
+    }()
 
     // MARK: - Initialization
     override init() {

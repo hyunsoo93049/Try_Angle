@@ -608,7 +608,6 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				EXCLUDED_SOURCE_FILE_NAMES = "Android_Handover/*";
 			};
 			name = Debug;
 		};
@@ -651,7 +650,6 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				EXCLUDED_SOURCE_FILE_NAMES = "Android_Handover/*";
 			};
 			name = Release;
 		};

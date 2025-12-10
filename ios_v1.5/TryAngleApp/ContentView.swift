@@ -503,6 +503,20 @@ struct ContentView: View {
                 )
             }
         }
+        // 🆕 ScenePhase Handling (Replaces NotificationCenter)
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                print("☀️ 포어그라운드 진입: 카메라 및 분석 재개")
+                cameraManager.startSession()
+                if referenceImage != nil {
+                     realtimeAnalyzer.resumeAnalysis()
+                }
+            } else if newPhase == .background {
+                print("🌙 백그라운드 진입: 카메라 및 분석 중단 (배터리 절약)")
+                cameraManager.stopSession()
+                realtimeAnalyzer.pauseAnalysis()
+            }
+        }
     }
 
     // MARK: - 사진 분석 및 피드백 표시
@@ -587,40 +601,11 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Background Handling (배터리 절약)
+    // MARK: - Lifecycle with ScenePhase
+    @Environment(\.scenePhase) private var scenePhase
 
-    /// 백그라운드/포어그라운드 처리 설정
-    private func setupBackgroundHandling() {
-        // 백그라운드 진입 시
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.willResignActiveNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("🌙 백그라운드 진입: 카메라 및 분석 중단 (배터리 절약)")
-            self.cameraManager.stopSession()
-            self.realtimeAnalyzer.pauseAnalysis()
-        }
+    // (Removed manual setupBackgroundHandling / removeBackgroundHandling)
 
-        // 포어그라운드 진입 시
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("☀️ 포어그라운드 진입: 카메라 및 분석 재개")
-            self.cameraManager.startSession()
-            if self.referenceImage != nil {
-                 self.realtimeAnalyzer.resumeAnalysis()
-            }
-        }
-    }
-
-    /// 백그라운드 처리 해제
-    private func removeBackgroundHandling() {
-        NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-    }
 
     /// 실제 분석 수행 (V1: 온디바이스만 사용, 서버 연결 비활성화)
     private func performAnalysis() async {
@@ -916,7 +901,6 @@ extension ContentView {
                 
                 print("✅ 카메라 세션 설정 완료 및 시작 (Combine Wired)")
             }
-            setupBackgroundHandling()
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 isInitializing = false
@@ -924,10 +908,10 @@ extension ContentView {
             }
         }
         .onDisappear {
+            // 앱 종료/화면 전환 시 세션 정리 (MainTab으로 갈 때 등)
             cameraManager.stopSession()
-            stopAnalysis()
             realtimeAnalyzer.pauseAnalysis()
-            removeBackgroundHandling()
+            stopAnalysis()
         }
     }
     
