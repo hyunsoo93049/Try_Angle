@@ -4,99 +4,82 @@ import Combine
 import Metal
 import CoreImage
 
-// MARK: - 렌즈 타입 정의
-enum CameraLensType: String, CaseIterable {
-    case ultraWide = "0.5"   // 초광각 (13mm, 0.5x)
-    case wide = "1"          // 광각 (26mm, 1x) - 기본
-    case telephoto = "3"     // 망원 (77mm, 3x)
+// MARK: - 렌즈 타입 정의 (순수하게 현재 물리 렌즈 상태만 표현)
+enum CameraLensType: String {
+    case ultraWide = "Ultra Wide" // 초광각
+    case wide = "Wide"            // 광각
+    case telephoto = "Telephoto"  // 망원
 
-    var displayName: String {
-        return rawValue + "x"
-    }
-
-    var zoomFactor: CGFloat {
-        switch self {
-        case .ultraWide: return 0.5
-        case .wide: return 1.0
-        case .telephoto: return 3.0
-        }
-    }
-
-    var deviceType: AVCaptureDevice.DeviceType {
-        switch self {
-        case .ultraWide: return .builtInUltraWideCamera
-        case .wide: return .builtInWideAngleCamera
-        case .telephoto: return .builtInTelephotoCamera
-        }
+    // EXIF 저장 및 디버그 표시용
+    var description: String {
+        return self.rawValue
     }
 }
 
 class CameraManager: NSObject, ObservableObject {
     // MARK: - Published Properties
     @Published var isAuthorized = false
-    @Published var currentFrame: UIImage?
+    // @Published var currentFrame: UIImage?  <- REMOVED: Using Combine stream
     @Published var isSessionRunning = false
     @Published var isFlashOn = false
     @Published var currentFPS: Double = 0.0
     @Published var currentZoom: CGFloat = 1.0
-    @Published var aspectRatio: CameraAspectRatio = .ratio4_3  // 카메라 비율
-    @Published var isFrontCamera: Bool = false  // 전면 카메라 여부
-    @Published var currentLens: CameraLensType = .wide  // 🆕 현재 렌즈
-    @Published var availableLenses: [CameraLensType] = [.wide]  // 🆕 사용 가능한 렌즈 목록
+    @Published var virtualZoom: CGFloat = 1.0  // 사용자에게 표시되는 줌 (0.5, 1, 2, 3 등)
+    @Published var aspectRatio: CameraAspectRatio = .ratio4_3
+    @Published var isFrontCamera: Bool = false
+    
+    // 🆕 Frame Stream for Analysis (Background Thread)
+    public let frameSubject = PassthroughSubject<CMSampleBuffer, Never>()
+    public let frameImageSubject = PassthroughSubject<UIImage, Never>() // For UI if absolutely needed (throttled)
+
+    // 🆕 현재 활성화된 물리 렌즈 (상태 표시용)
+    @Published var currentLens: CameraLensType = .wide
+
+    // 🆕 UI에 표시할 줌 버튼 리스트 (기기별 자동 생성)
+    @Published var zoomButtons: [CGFloat] = [1.0]
 
     // MARK: - Camera Properties
     private let session = AVCaptureSession()
     private var videoOutput = AVCaptureVideoDataOutput()
-    private var photoOutput = AVCapturePhotoOutput()  // 🆕 사진 촬영용
+    private var photoOutput = AVCapturePhotoOutput()
     private var currentCamera: AVCaptureDevice?
     private var currentInput: AVCaptureDeviceInput?
-
-    // 🆕 사진 촬영 콜백
     private var photoCaptureCompletion: ((Data?, Error?) -> Void)?
 
-    // 🆕 Virtual Device 관련 (심리스 줌 전환)
-    private var isUsingVirtualDevice = false  // 가상 디바이스 사용 여부
-    private var minZoomFactor: CGFloat = 1.0  // 최소 줌 (초광각 시 0.5 등)
-    private var maxZoomFactor: CGFloat = 10.0  // 최대 줌
+    private var isUsingVirtualDevice = false
+    private var minZoomFactor: CGFloat = 1.0
+    private var maxZoomFactor: CGFloat = 10.0
+    
+    // [자동화] 배율 보정값 (User 1x가 Device 몇 배인지)
+    private var zoomFactorScale: CGFloat = 1.0
+    
+    // 렌즈 전환 포인트 (물리 렌즈가 바뀌는 지점)
+    private var switchOverZoomFactors: [CGFloat] = []
 
-    // 개별 렌즈 지원 (Virtual Device 미지원 시 폴백)
-    private var availableCameras: [CameraLensType: AVCaptureDevice] = [:]
-
-    // MARK: - Performance Optimization
+    // MARK: - Performance Properties
     private let ciContext: CIContext = {
-        // 🔥 Metal GPU 가속 사용
         if let metalDevice = MTLCreateSystemDefaultDevice() {
-            return CIContext(mtlDevice: metalDevice, options: [
-                .workingColorSpace: NSNull(),  // 컬러 변환 스킵
-                .outputColorSpace: NSNull(),   // 출력 컬러 변환 스킵
-                .cacheIntermediates: false     // 메모리 절약
-            ])
+            return CIContext(mtlDevice: metalDevice, options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull(), .cacheIntermediates: false])
         } else {
-            // Metal 없으면 CPU 폴백
-            return CIContext(options: [
-                .useSoftwareRenderer: false,
-                .workingColorSpace: NSNull(),
-                .outputColorSpace: NSNull()
-            ])
+            return CIContext(options: [.useSoftwareRenderer: false, .workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
         }
     }()
-
-    // 🔥 중복 버퍼 방지
     private var lastBufferTime: TimeInterval = 0
-
-    // MARK: - Settings
-    private var currentISO: Float?
-    private var currentExposureCompensation: Float?
-
-    // MARK: - FPS Tracking
-    private var frameCount = 0
-    private var lastFPSUpdate = Date()
     private var fpsFrameCount = 0
+    private var lastFPSUpdate = Date()
+    private var lastFrameUpdateTime: CFTimeInterval = 0  // 프레임 UI 업데이트 시간
+    private let minFrameUpdateInterval: CFTimeInterval = 1.0 / 20.0  // 20fps로 제한
 
-    // Preview layer (UIKit에서 사용)
+    // ✅ 줌 디바운싱
+    private var pendingZoomWorkItem: DispatchWorkItem?
+
+    // MARK: - Base Focal Length (For EXIF)
+    private var baseFocalLength35mm: CGFloat = 24.0
+
+    // MARK: - Preview Layer
     var previewLayer: AVCaptureVideoPreviewLayer {
         let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill  // 기본 카메라처럼 화면 전체 채우기
+        layer.videoGravity = .resizeAspect // 🔥 중요: Fill 대신 Aspect로 변경하여 4:3 전체 영역 표시 (WYSIWYG)
         return layer
     }
 
@@ -106,65 +89,77 @@ class CameraManager: NSObject, ObservableObject {
         checkAuthorization()
     }
 
-    // MARK: - Authorization
     private func checkAuthorization() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            isAuthorized = true
+        case .authorized: isAuthorized = true
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
-                    self?.isAuthorized = granted
-                }
+                DispatchQueue.main.async { self?.isAuthorized = granted }
             }
-        default:
-            isAuthorized = false
+        default: isAuthorized = false
         }
     }
 
     // MARK: - Session Setup
-    func setupSession() {
-        guard isAuthorized else { return }
-
-        session.beginConfiguration()
-
-        // 🆕 Virtual Device 우선 탐색 (심리스 줌 전환 지원)
-        let camera = findBestBackCamera()
-
-        guard let camera = camera else {
-            session.commitConfiguration()
+    func setupSession(completion: (() -> Void)? = nil) {
+        guard isAuthorized else {
+            completion?()
             return
         }
 
-        currentCamera = camera
-        currentLens = .wide
-        isFrontCamera = false
+        // 🔥 UI 반응성 개선: 백그라운드에서 초기화 (Safe Queue 사용)
+        sessionQueue.async { [weak self] in
+            guard let self = self else {
+                DispatchQueue.main.async { completion?() }
+                return
+            }
 
+            self.session.beginConfiguration()
+
+            // 후면 카메라 우선 탐색
+            let camera = self.findBestBackCamera()
+            guard let camera = camera else {
+                self.session.commitConfiguration()
+                DispatchQueue.main.async { completion?() }
+                return
+            }
+
+            self.configureSession(with: camera)
+            self.session.commitConfiguration()
+
+            // 줌 및 렌즈 설정 (Commit 후에 해야 함)
+            self.setupZoomFactors(for: camera)
+
+            // 🔥 설정 완료 후 콜백 호출
+            DispatchQueue.main.async {
+                completion?()
+            }
+        }
+    }
+    
+    private func configureSession(with camera: AVCaptureDevice) {
+        currentCamera = camera
+        
         do {
             let input = try AVCaptureDeviceInput(device: camera)
             if session.canAddInput(input) {
                 session.addInput(input)
                 currentInput = input
             }
-
-            // 🆕 고해상도 포맷 설정 (뿌옇게 나오는 문제 해결)
+            
+            // 포맷 설정
             configureHighQualityFormat(for: camera)
+            analyzeCameraCharacteristics(for: camera)
 
-            // 비디오 출력 설정
+            // 비디오 출력
             let videoQueue = DispatchQueue(label: "videoQueue", qos: .userInteractive, attributes: [])
             videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
-            videoOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
+            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+            if session.canAddOutput(videoOutput) { session.addOutput(videoOutput) }
 
-            if session.canAddOutput(videoOutput) {
-                session.addOutput(videoOutput)
-            }
-
-            // 🆕 사진 출력 추가
+            // 사진 출력
             if session.canAddOutput(photoOutput) {
                 session.addOutput(photoOutput)
-                // 고품질 사진 설정
                 if #available(iOS 16.0, *) {
                     photoOutput.maxPhotoDimensions = camera.activeFormat.supportedMaxPhotoDimensions.first ?? CMVideoDimensions(width: 4032, height: 3024)
                 } else {
@@ -172,697 +167,557 @@ class CameraManager: NSObject, ObservableObject {
                 }
             }
 
-            // 비디오 방향 설정
+            // 방향 설정
             if let connection = videoOutput.connection(with: .video) {
-                connection.videoOrientation = .portrait
-                connection.isVideoMirrored = false
+                connection.videoRotationAngle = 90
+                connection.isVideoMirrored = (camera.position == .front)
             }
-
         } catch {
-            print("❌ Camera setup error: \(error)")
+            print("❌ Session configuration failed: \(error)")
         }
-
-        session.commitConfiguration()
-
-        // Virtual Device 줌 범위 설정 (commitConfiguration 이후)
-        setupZoomFactors(for: camera)
-
-        // 개별 렌즈 정보도 탐색 (UI 표시용)
-        discoverAvailableLenses()
-
-        print("📷 Virtual Device 사용: \(isUsingVirtualDevice)")
-        print("📷 줌 범위: \(minZoomFactor)x ~ \(maxZoomFactor)x")
-        print("📷 사용 가능한 렌즈: \(availableLenses.map { $0.displayName })")
-
-        // 🆕 카메라 특성 분석
-        analyzeCameraCharacteristics(for: camera)
     }
 
-    // MARK: - 카메라 특성 분석
+    // MARK: - Smart Zoom Setup (핵심 로직)
+    private func setupZoomFactors(for device: AVCaptureDevice) {
+        minZoomFactor = device.minAvailableVideoZoomFactor
+        maxZoomFactor = min(device.maxAvailableVideoZoomFactor, 15.0 * 2.0)
+        
+        // 렌즈 전환 포인트
+        switchOverZoomFactors = device.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) }
+        
+        print("🔭 [Zoom Setup] Device: \(device.deviceType.rawValue)")
+        print("🔭 [Zoom Setup] SwitchOver Factors: \(switchOverZoomFactors)")
+        print("🔭 [Zoom Setup] Min: \(minZoomFactor), Max: \(maxZoomFactor)")
 
-    /// 실제 카메라 FOV와 35mm 환산 초점거리 계산
-    private var baseFocalLength35mm: CGFloat = 24.0  // 기본값 24mm
-
-    private func analyzeCameraCharacteristics(for device: AVCaptureDevice) {
-        // 현재 포맷의 FOV 가져오기 (Virtual Device는 초광각 기준!)
-        let fov = device.activeFormat.videoFieldOfView
-        print("📷 [카메라 특성] 포맷 FOV: \(fov)° (Virtual Device는 초광각 기준)")
-
-        // 개별 렌즈별 실제 특성 확인
-        print("📷 [카메라 특성] 디바이스 타입: \(device.deviceType.rawValue)")
-
-        // 🔧 광각 카메라의 실제 FOV를 기준으로 baseFocalLength35mm 설정
-        if let wideCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
-            // 광각 카메라의 포맷에서 FOV 가져오기
-            for format in wideCamera.formats {
-                let wideFov = format.videoFieldOfView
-                if wideFov > 0 && wideFov < 90 {  // 광각은 보통 60-80° 범위
-                    let wide35mm = 36.0 / (2.0 * tan(CGFloat(wideFov) * .pi / 180.0 / 2.0))
-                    baseFocalLength35mm = wide35mm  // 🔧 광각 렌즈 기준으로 설정!
-                    print("📷 [광각 렌즈] FOV: \(wideFov)° → 35mm환산: \(Int(wide35mm))mm")
-                    print("📷 ✅ baseFocalLength35mm = \(Int(wide35mm))mm (광각 기준)")
-                    break
+        // 1. 배율 스케일 결정 (전면/후면 통합 로직)
+        if device.position == .back {
+            switch device.deviceType {
+            case .builtInTripleCamera, .builtInDualWideCamera:
+                // 🔥 초광각(0.5x)이 있는 모델: 첫 번째 전환점이 곧 Wide(1.0x) 렌즈의 시작점입니다.
+                // 기기마다 2.0이 아닐 수 있으므로(예: 1.5 ~ 3.0), 하드웨어 값을 직접 사용하여 오차를 없앱니다.
+                if let wideLensZoom = switchOverZoomFactors.first {
+                    zoomFactorScale = wideLensZoom
+                } else {
+                    // Fallback: 스위치오버 값이 없더라도 이 기기들은 구조상 0.5x(Ultra)가 Base(1.0)임.
+                    // 따라서 User 1.0x = Device 2.0x (approx)
+                    zoomFactorScale = 2.0
                 }
+                
+                // 🛠 보정: 만약 Scale이 1.1 이하인데 기기 타입이 UltraWide 포함이라면 강제로 2.0으로 보정 (0.5x 버튼 보장)
+                if zoomFactorScale < 1.1 {
+                    zoomFactorScale = 2.0
+                    print("⚠️ [Zoom Setup] Forced Scale to 2.0 for DualWide/Triple Camera")
+                }
+                
+                print("🔭 [Zoom Setup] Scale determined as: \(zoomFactorScale) (UltraWide Base)")
+            case .builtInDualCamera:
+                 // Wide + Tele (No Ultra Wide)
+                 // Base is Wide (1.0). Tele starts at switchOver (e.g. 2.0)
+                 zoomFactorScale = 1.0
+                 print("🔭 [Zoom Setup] Scale: 1.0 (Wide+Tele Base)")
+            default:
+                zoomFactorScale = 1.0 // 일반 모델 (Device 1.0 = User 1.0)
+                print("🔭 [Zoom Setup] Scale: 1.0 (Standard Base)")
             }
         } else {
-            // 광각 카메라를 찾을 수 없으면 기본값 24mm 사용
-            baseFocalLength35mm = 24.0
-            print("📷 ⚠️ 광각 카메라 미발견, 기본값 24mm 사용")
+            // 전면 카메라
+            zoomFactorScale = 1.0
+        }
+        
+        // 2. 버튼 생성 로직
+        var buttons: [CGFloat] = []
+        
+        if device.position == .back {
+            // --- 후면 카메라 버튼 ---
+            // Scale이 1.1보다 크다 = Base가 UltraWide다 = 0.5x 지원
+            if zoomFactorScale > 1.1 { buttons.append(0.5) }
+            buttons.append(1.0)
+            buttons.append(2.0)
+            
+            // 망원 렌즈 확인
+            // Triple/DualWide (Base: Ultra) -> Index 1 is Tele
+            // Dual (Base: Wide) -> Index 0 is Tele
+            var teleDeviceZoom: CGFloat?
+            
+            if zoomFactorScale > 1.1 {
+                // Triple/DualWide
+                if switchOverZoomFactors.count > 1 {
+                    teleDeviceZoom = switchOverZoomFactors[1]
+                }
+            } else {
+                // Dual (Wide+Tele)
+                if switchOverZoomFactors.count > 0 {
+                    teleDeviceZoom = switchOverZoomFactors[0]
+                }
+            }
+            
+            if let teleDev = teleDeviceZoom {
+                let teleDisplay = deviceZoomToDisplayZoom(teleDev)
+                // 5배줌(Pro Max) vs 3배줌(Pro) 구분 (오차 범위 감안)
+                if abs(teleDisplay - 5.0) < 0.5 { buttons.append(5.0) }
+                else if abs(teleDisplay - 3.0) < 0.5 { buttons.append(3.0) }
+                else { buttons.append(round(teleDisplay * 10) / 10.0) } // 그 외 배율 (예: 2.5)
+            }
+        } else {
+            // --- 전면 카메라 버튼 (동적 감지) ---
+            // 최신 아이폰 전면 카메라는 줌 아웃(0.xxx)을 지원할 수 있음
+            buttons.append(1.0)
+            
+            // 전면 카메라가 줌을 지원하는지 확인 (보통 1배보다 작게 줌아웃 가능하거나, 1배보다 크게 줌인 가능)
+            // 예: iPhone 12 전면은 1x가 기본이지만 화각을 넓힐 수 있음 (UI상 버튼으로 제공하진 않고 화살표로 제공하지만, 여기선 버튼화 가능)
+            // 여기서는 심플하게 1배만 제공하거나, 필요시 로직 추가.
+            // (피드백 반영: 전면 카메라는 보통 '화각' 토글이지만, 줌 팩터로는 1.0이 max인 경우가 많음. 일단 1.0 유지하되 확장 가능성 열어둠)
         }
 
-        // Virtual Device 사용 시 추가 로그
-        if isUsingVirtualDevice {
-            print("📷 [Virtual Device] 초광각 FOV: \(fov)° (14mm 상당)")
-            print("📷 [Virtual Device] 1x 줌 = 광각 \(Int(baseFocalLength35mm))mm")
+        // 메인 스레드에서 @Published 속성 업데이트
+        DispatchQueue.main.async {
+            self.zoomButtons = Array(Set(buttons)).sorted()
         }
 
-        // 프리뷰 vs 캡처 비교
-        comparePreviewAndCapture(for: device)
+        // 3. 초기 줌 설정 (1.0x)
+        let initialUserZoom: CGFloat = 1.0
+        let initialDeviceZoom = displayZoomToDeviceZoom(initialUserZoom)
+        
+        do {
+            try device.lockForConfiguration()
+            device.cancelVideoZoomRamp()
+            // 범위 체크
+            let safeZoom = max(device.minAvailableVideoZoomFactor, min(initialDeviceZoom, device.maxAvailableVideoZoomFactor))
+            device.videoZoomFactor = safeZoom
+            device.unlockForConfiguration()
+
+            // 메인 스레드에서 @Published 속성 업데이트
+            DispatchQueue.main.async {
+                self.currentZoom = safeZoom
+                self.virtualZoom = self.deviceZoomToDisplayZoom(safeZoom)
+                self.updateCurrentLensType(for: safeZoom) // 초기 렌즈 상태 업데이트
+            }
+        } catch {
+            print("❌ Zoom setup failed: \(error)")
+        }
     }
 
-    /// 프리뷰와 캡처의 화각 비교
-    private func comparePreviewAndCapture(for device: AVCaptureDevice) {
-        print("📷 ═══════════════════════════════════════")
-        print("📷 [프리뷰 vs 캡처 비교]")
-
-        // 현재 활성 포맷 정보
-        let activeFormat = device.activeFormat
-        let dimensions = CMVideoFormatDescriptionGetDimensions(activeFormat.formatDescription)
-        print("📷 비디오 해상도: \(dimensions.width) x \(dimensions.height)")
-        print("📷 비디오 FOV: \(activeFormat.videoFieldOfView)°")
-
-        // 사진 출력 정보
-        if #available(iOS 16.0, *) {
-            let photoDimensions = photoOutput.maxPhotoDimensions
-            print("📷 사진 최대 해상도: \(photoDimensions.width) x \(photoDimensions.height)")
-        }
-
-        // 현재 줌 정보
-        print("📷 현재 videoZoomFactor: \(device.videoZoomFactor)")
-        print("📷 wideAngleZoomFactor: \(wideAngleZoomFactor)")
-        print("📷 virtualZoom (표시값): \(virtualZoom)x")
-        print("📷 계산된 35mm: \(focalLengthIn35mm)mm")
-
-        // 기본 카메라 앱과의 비교를 위한 정보
-        print("📷 ───────────────────────────────────────")
-        print("📷 [기본 카메라 앱 비교 체크리스트]")
-        print("📷 1. 기본앱 1x = 우리앱 virtualZoom \(virtualZoom)x")
-        print("📷 2. 기본앱 1x에서의 실제 화각 = \(activeFormat.videoFieldOfView)°")
-        print("📷 3. 줌 1.0x에서 deviceZoom = \(wideAngleZoomFactor)")
-        print("📷 ═══════════════════════════════════════")
+    // MARK: - Zoom Helpers
+    private func displayZoomToDeviceZoom(_ displayZoom: CGFloat) -> CGFloat {
+        return displayZoom * zoomFactorScale
     }
 
-    // 🆕 고화질 포맷 설정 (60fps 보장)
+    private func deviceZoomToDisplayZoom(_ deviceZoom: CGFloat) -> CGFloat {
+        return deviceZoom / zoomFactorScale
+    }
+
+    // MARK: - Public Controls
+    // MARK: - Safe Session Control
+    private let sessionQueue = DispatchQueue(label: "com.TryAngle.sessionQueue")
+    private var pendingPauseWorkItem: DispatchWorkItem? // 지연된 일시정지 작업
+
+    func startSession() {
+        // 대기 중인 일시정지 작업이 있다면 취소 (즉시 복귀 시 세션 유지)
+        pendingPauseWorkItem?.cancel()
+        pendingPauseWorkItem = nil
+
+        guard !isSessionRunning else { return }
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            // 중복 실행 방지
+            guard !self.session.isRunning else {
+                DispatchQueue.main.async { self.isSessionRunning = true }
+                return
+            }
+            self.session.startRunning()
+            DispatchQueue.main.async { self.isSessionRunning = true }
+        }
+    }
+
+    func stopSession() {
+        // 즉시 중지 (앱 종료 등)
+        pendingPauseWorkItem?.cancel()
+        
+        guard isSessionRunning else { return }
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.session.stopRunning()
+            DispatchQueue.main.async { self.isSessionRunning = false }
+        }
+    }
+    
+    // 탭 전환 대응 (비동기 처리 + 지연 효과)
+    func pauseSession(immediate: Bool = false) {
+        // 즉시 중지 요청인 경우
+        if immediate {
+            print("⏸️ 카메라 세션 즉시 중지 (Tab 전환 / Background)")
+            pendingPauseWorkItem?.cancel()
+            stopSession() // sessionQueue에서 처리됨
+            return
+        }
+        
+        // 5초 지연 대기
+        let workItem = DispatchWorkItem { [weak self] in
+            print("💤 5초 경과: 카메라 세션 중지")
+            self?.stopSession()
+        }
+        pendingPauseWorkItem = workItem
+        // 메인 큐에서 딜레이 후 실행 (취소 가능하도록) -> 실제 stop은 sessionQueue에서
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: workItem)
+    }
+
+    func resumeSession() {
+        // 복귀 시 startSession 호출 -> 내부에서 pending item 취소됨
+        startSession()
+    }
+
+    func switchCamera() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard let current = self.currentCamera else { return }
+            let newPosition: AVCaptureDevice.Position = (current.position == .back) ? .front : .back
+            
+            self.session.beginConfiguration()
+            if let input = self.currentInput { self.session.removeInput(input) }
+            
+            // 새 카메라 찾기
+            let newCamera = (newPosition == .front)
+                ? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+                : self.findBestBackCamera()
+            
+            guard let camera = newCamera else {
+                self.session.commitConfiguration()
+                return
+            }
+            
+            self.configureSession(with: camera) // 세션 재설정 (여기서 포맷, 방향 등 다 처리됨)
+            
+            self.session.commitConfiguration()
+            
+            // 메인 스레드에서 @Published 속성 업데이트
+            DispatchQueue.main.async {
+                self.isFrontCamera = (newPosition == .front)
+            }
+            
+            // 줌 재설정 (매우 중요: 전면/후면 특성이 다르므로 다시 계산)
+            self.setupZoomFactors(for: camera)
+        }
+    }
+
+    func setZoomAnimated(_ displayFactor: CGFloat) {
+        guard let device = currentCamera else { return }
+        let deviceFactor = displayZoomToDeviceZoom(displayFactor)
+        let clampedFactor = max(minZoomFactor, min(deviceFactor, maxZoomFactor))
+
+        do {
+            try device.lockForConfiguration()
+            device.ramp(toVideoZoomFactor: clampedFactor, withRate: 30.0) // 부드러운 줌
+            device.unlockForConfiguration()
+
+            // ✅ 메인 스레드에서 @Published 속성 업데이트
+            DispatchQueue.main.async {
+                self.currentZoom = clampedFactor
+                self.virtualZoom = self.deviceZoomToDisplayZoom(clampedFactor)
+                self.updateCurrentLensType(for: clampedFactor)
+            }
+        } catch {
+            print("❌ Failed to set zoom: \(error)")
+        }
+    }
+
+    // MARK: - Pinch Zoom (제스처용)
+    // MARK: - Pinch Zoom (제스처용)
+    // 델타가 아닌 절대값(User Scale)을 받아 즉시 적용
+    func setZoomImmediate(_ displayZoom: CGFloat) {
+        let deviceFactor = displayZoomToDeviceZoom(displayZoom)
+        let clampedFactor = max(minZoomFactor, min(deviceFactor, maxZoomFactor))
+
+        // ✅ 디바운싱: 이전 작업 취소
+        pendingZoomWorkItem?.cancel()
+
+        // ✅ 핀치는 반응성이 중요하므로 즉시 실행 (단, 너무 잦은 호출 방지 위해 아주 짧은 딜레이나 스로틀링 고려 가능)
+        // 여기서는 부드러운 UI 반응을 위해 디바운싱 없이 즉시 적용하되, 
+        // 하드웨어 부하를 줄이기 위해 Global Queue에서 실행
+        
+        // *수정*: 디바운싱을 하면 뚝뚝 끊김. 핀치는 연속적이므로 즉시 적용해야 함.
+        // 다만 lock/unlock 오버헤드가 있으므로 메인 스레드 블로킹 방지가 핵심.
+        
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self, let device = self.currentCamera else { return }
+
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = clampedFactor  // ramp 없이 즉시 변경
+                device.unlockForConfiguration()
+
+                // UI 업데이트는 메인에서
+                DispatchQueue.main.async {
+                    self.currentZoom = clampedFactor
+                    self.virtualZoom = self.deviceZoomToDisplayZoom(clampedFactor)
+                    self.updateCurrentLensType(for: clampedFactor)
+                }
+            } catch {
+                print("❌ Failed to apply pinch zoom: \(error)")
+            }
+        }
+        
+        // 백그라운드에서 즉시 실행
+        sessionQueue.async(execute: workItem)
+    }
+
+    // 🔥 물리 렌즈 상태 판단 (UI 버튼과 무관하게, 현재 하드웨어 상태)
+    private func updateCurrentLensType(for deviceZoom: CGFloat) {
+        // 메인 스레드에서 @Published 속성 업데이트
+        DispatchQueue.main.async {
+            // 전면 카메라는 보통 단일 렌즈
+            if self.isFrontCamera {
+                self.currentLens = .wide
+                return
+            }
+
+            // 1. 초광각 구간
+            if let wideStart = self.switchOverZoomFactors.first, deviceZoom < wideStart {
+                self.currentLens = .ultraWide
+                return
+            }
+
+            // 2. 망원 구간 (있다면)
+            if self.switchOverZoomFactors.count > 1 {
+                let teleStart = self.switchOverZoomFactors[1]
+                if deviceZoom >= teleStart {
+                    self.currentLens = .telephoto
+                    return
+                }
+            }
+
+            // 3. 그 외는 광각 (디지털 줌 포함)
+            self.currentLens = .wide
+        }
+    }
+    
+    // MARK: - Helper Methods
+    private func findBestBackCamera() -> AVCaptureDevice? {
+        if let triple = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back) {
+            isUsingVirtualDevice = true; return triple
+        }
+        if let dualWide = AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back) {
+            isUsingVirtualDevice = true; return dualWide
+        }
+        if let dual = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back) {
+            isUsingVirtualDevice = true; return dual
+        }
+        isUsingVirtualDevice = false
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
+    // MARK: - Format Configuration
     private func configureHighQualityFormat(for device: AVCaptureDevice) {
-        // 📷 사진 모드와 동일한 4:3 화각 우선 (아이폰 기본 카메라와 동일)
-        // fps는 높을수록 좋지만 강제하지 않음
-
         let formats = device.formats.filter { format in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let mediaType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
-
-            // 420v 또는 420f 포맷 (표준 비디오 포맷)
             let isVideoFormat = mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
                                mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-
-            // 최소 1080 높이 이상
-            guard isVideoFormat && dimensions.height >= 1080 else { return false }
-
+            // 720p 이상만 (너무 낮은 비디오 포맷 제외)
+            guard isVideoFormat && dimensions.height >= 720 else { return false }
             return true
         }
 
-        // 4:3 비율 우선 정렬
         let sortedFormats = formats.sorted { f1, f2 in
+            // 1. 🔥 사진 해상도 우선 (12MP 4032 vs 2MP 1920)
+            // supportedMaxPhotoDimensions가 비어있으면 0 취급
+            let w1 = f1.supportedMaxPhotoDimensions.last?.width ?? 0
+            let w2 = f2.supportedMaxPhotoDimensions.last?.width ?? 0
+            
+            // 유의미한 차이가 있다면 (예: 4000 vs 1920) 해상도 높은 것 우선
+            if abs(Int(w1) - Int(w2)) > 100 {
+                return w1 > w2
+            }
+
+            // 2. FPS 우선 (60fps)
+            let maxFPS1 = f1.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+            let maxFPS2 = f2.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+
+            // 60fps 지원 여부를 최우선
+            if maxFPS1 >= 59 && maxFPS2 < 59 { return true }
+            if maxFPS1 < 59 && maxFPS2 >= 59 { return false }
+            
+            // 3. 4:3 비율 우선 (센서 비율 매칭)
             let d1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription)
             let d2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription)
+            let r1 = Float(d1.width) / Float(d1.height)
+            let r2 = Float(d2.width) / Float(d2.height)
+            
+            let is43_1 = abs(r1 - 4.0/3.0) < 0.05
+            let is43_2 = abs(r2 - 4.0/3.0) < 0.05
+            
+            if is43_1 && !is43_2 { return true }
+            if !is43_1 && is43_2 { return false }
 
-            // 4:3 비율 체크 (허용 오차 0.01)
-            let ratio1 = Float(d1.width) / Float(d1.height)
-            let ratio2 = Float(d2.width) / Float(d2.height)
-            let is4to3_1 = abs(ratio1 - 4.0/3.0) < 0.01
-            let is4to3_2 = abs(ratio2 - 4.0/3.0) < 0.01
-
-            // 4:3 비율 우선
-            if is4to3_1 && !is4to3_2 { return true }
-            if !is4to3_1 && is4to3_2 { return false }
-
-            // 같은 비율이면 해상도로 비교 (너무 높지 않은 것 선호)
-            // 4K(4032x3024)는 처리 부하가 크므로 적당한 해상도 선호
-            let pixels1 = Int(d1.width) * Int(d1.height)
-            let pixels2 = Int(d2.width) * Int(d2.height)
-
-            // 약 3~4백만 픽셀 (2048x1536 등) 근처가 최적
-            let optimal = 3_000_000
-            let diff1 = abs(pixels1 - optimal)
-            let diff2 = abs(pixels2 - optimal)
-
-            return diff1 < diff2
+            // 4. 비디오 해상도는 너무 크지 않은 것 선호 (프리뷰 성능 및 발열 관리)
+            // 4K(8MP) vs FHD(2MP) -> 12MP 사진이 가능하다면 FHD가 더 가벼움
+            // 단, 사진 해상도가 같다면 비디오 해상도가 높은게 더 선명할 수 있음.
+            // 여기서는 사진 해상도가 같다는 전제이므로, 3MP 근처 선호(기존 로직 유지)
+            let p1 = Int(d1.width) * Int(d1.height)
+            let p2 = Int(d2.width) * Int(d2.height)
+            return abs(p1 - 3_000_000) < abs(p2 - 3_000_000)
         }
 
         if let bestFormat = sortedFormats.first {
             do {
                 try device.lockForConfiguration()
                 device.activeFormat = bestFormat
+                
+                // 설정된 포맷 정보 로그
+                let dim = CMVideoFormatDescriptionGetDimensions(bestFormat.formatDescription)
+                let maxPhoto = bestFormat.supportedMaxPhotoDimensions.last
+                print("✅ [설정됨] 포맷: Video=\(dim.width)x\(dim.height), Photo=\(maxPhoto?.width ?? 0)x\(maxPhoto?.height ?? 0)")
 
-                // 가능한 최대 fps 설정 (강제하지 않음)
+                // 🔥 60fps 설정
                 if let maxFPSRange = bestFormat.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
-                    let targetFPS = min(maxFPSRange.maxFrameRate, 60.0)  // 최대 60fps
+                    let targetFPS = min(maxFPSRange.maxFrameRate, 60.0)
                     device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
                     device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
                 }
-
                 device.unlockForConfiguration()
-
-                let dimensions = CMVideoFormatDescriptionGetDimensions(bestFormat.formatDescription)
-                let ratio = Float(dimensions.width) / Float(dimensions.height)
-                let maxFPS = bestFormat.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
-                let ratioStr = abs(ratio - 4.0/3.0) < 0.01 ? "4:3" : String(format: "%.2f:1", ratio)
-                print("📷 포맷 설정: \(dimensions.width)x\(dimensions.height) (\(ratioStr)) @ \(Int(maxFPS))fps")
             } catch {
                 print("❌ 포맷 설정 실패: \(error)")
-                // fallback: .photo preset (4:3)
-                if session.canSetSessionPreset(.photo) {
-                    session.sessionPreset = .photo
-                    print("📷 기본 preset 사용: .photo (4:3)")
+            }
+        }
+    }
+
+    private func analyzeCameraCharacteristics(for device: AVCaptureDevice) {
+        // 광각 카메라의 FOV를 통해 35mm 환산 초점거리 계산
+        if let wideCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+            for format in wideCamera.formats {
+                let wideFov = format.videoFieldOfView
+                if wideFov > 0 && wideFov < 90 {
+                    let wide35mm = 36.0 / (2.0 * tan(CGFloat(wideFov) * .pi / 180.0 / 2.0))
+                    baseFocalLength35mm = wide35mm
+                    break
                 }
             }
         } else {
-            // 적합한 포맷이 없으면 .photo preset 사용 (4:3)
-            if session.canSetSessionPreset(.photo) {
-                session.sessionPreset = .photo
-                print("📷 기본 preset 사용: .photo (4:3)")
-            }
+            baseFocalLength35mm = 24.0
         }
     }
-
-    // 🆕 최적의 후면 카메라 찾기 (Virtual Device 우선)
-    private func findBestBackCamera() -> AVCaptureDevice? {
-        // 1순위: Triple Camera (0.5x, 1x, 3x) - iPhone 11 Pro 이상
-        if let tripleCamera = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back) {
-            isUsingVirtualDevice = true
-            print("📷 Triple Camera 사용 (심리스 줌 지원)")
-            return tripleCamera
-        }
-
-        // 2순위: Dual Wide Camera (0.5x, 1x) - iPhone 11 이상
-        if let dualWideCamera = AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back) {
-            isUsingVirtualDevice = true
-            print("📷 Dual Wide Camera 사용 (심리스 줌 지원)")
-            return dualWideCamera
-        }
-
-        // 3순위: Dual Camera (1x, 2x) - iPhone 7 Plus ~ iPhone X
-        if let dualCamera = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back) {
-            isUsingVirtualDevice = true
-            print("📷 Dual Camera 사용 (심리스 줌 지원)")
-            return dualCamera
-        }
-
-        // 4순위: Wide Angle Camera (1x만) - 모든 iPhone
-        isUsingVirtualDevice = false
-        print("📷 Wide Angle Camera 사용 (단일 렌즈)")
-        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
-    }
-
-    // 🆕 Virtual Device 렌즈 전환 포인트 (0.5x→1x, 1x→2x 전환 줌 팩터)
-    private var switchOverZoomFactors: [CGFloat] = []
-    private var wideAngleZoomFactor: CGFloat = 2.0  // 광각(1x) 줌 팩터 (기본값)
-    private var telephotoZoomFactor: CGFloat = 4.0  // 망원(2x) 줌 팩터 (기본값)
-
-    // 🆕 줌 팩터 범위 설정
-    private func setupZoomFactors(for device: AVCaptureDevice) {
-        minZoomFactor = device.minAvailableVideoZoomFactor
-        // 사용자 표시 15x = 실제 videoZoomFactor 30.0 (wideAngleZoomFactor=2.0 기준)
-        maxZoomFactor = min(device.maxAvailableVideoZoomFactor, 30.0)
-
-        // 🆕 Virtual Device의 렌즈 전환 포인트 가져오기
-        // Triple Camera: [2.0, 4.0] → 1.0=초광각, 2.0=광각, 4.0=망원
-        // Dual Wide: [2.0] → 1.0=초광각, 2.0=광각
-        switchOverZoomFactors = device.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) }
-
-        if let firstSwitchOver = switchOverZoomFactors.first {
-            wideAngleZoomFactor = firstSwitchOver  // 광각 렌즈 시작점
-        }
-        if switchOverZoomFactors.count > 1 {
-            telephotoZoomFactor = switchOverZoomFactors[1]  // 망원 렌즈 시작점
-        }
-
-        print("📷 렌즈 전환 포인트: \(switchOverZoomFactors)")
-        print("📷 광각(1x) = videoZoomFactor \(wideAngleZoomFactor)")
-
-        // 초기값 설정 (광각 렌즈 = 사용자에게 1x로 표시)
-        currentZoom = wideAngleZoomFactor
-        virtualZoom = 1.0  // 사용자에게 보이는 값
-        currentLens = .wide
-
-        // 🆕 광각(1x)으로 시작 (wideAngleZoomFactor 사용)
-        do {
-            try device.lockForConfiguration()
-            device.cancelVideoZoomRamp()
-            device.videoZoomFactor = wideAngleZoomFactor
-            device.unlockForConfiguration()
-            print("📷 초기 줌 광각(1x)으로 설정 완료: videoZoomFactor = \(wideAngleZoomFactor)")
-        } catch {
-            print("❌ 초기 줌 설정 실패: \(error)")
-        }
-
-        print("📷 디바이스 줌 범위: \(device.minAvailableVideoZoomFactor) ~ \(device.maxAvailableVideoZoomFactor)")
-        print("📷 [DEBUG] 실제 설정된 줌: \(device.videoZoomFactor)")
-        print("📷 [DEBUG] virtualZoom: \(virtualZoom)x = \(focalLengthIn35mm)mm")
-    }
-
-    // 🆕 사용 가능한 렌즈 탐지 (UI 표시용)
-    private func discoverAvailableLenses() {
-        availableCameras.removeAll()
-        var lenses: [CameraLensType] = []
-
-        // Virtual Device 사용 시에도 개별 렌즈 정보 필요 (UI 버튼 표시)
-        let deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInUltraWideCamera,
-            .builtInWideAngleCamera,
-            .builtInTelephotoCamera
-        ]
-
-        let discoverySession = AVCaptureDevice.DiscoverySession(
-            deviceTypes: deviceTypes,
-            mediaType: .video,
-            position: .back
-        )
-
-        for device in discoverySession.devices {
-            switch device.deviceType {
-            case .builtInUltraWideCamera:
-                availableCameras[.ultraWide] = device
-                lenses.append(.ultraWide)
-            case .builtInWideAngleCamera:
-                availableCameras[.wide] = device
-                lenses.append(.wide)
-            case .builtInTelephotoCamera:
-                availableCameras[.telephoto] = device
-                lenses.append(.telephoto)
-            default:
-                break
-            }
-        }
-
-        availableLenses = lenses.sorted { $0.zoomFactor < $1.zoomFactor }
-    }
-
-    // MARK: - Session Control
-    func startSession() {
-        guard !isSessionRunning else { return }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.session.startRunning()
-            DispatchQueue.main.async {
-                self?.isSessionRunning = true
-            }
-        }
-    }
-
-    func stopSession() {
-        guard isSessionRunning else { return }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.session.stopRunning()
-            DispatchQueue.main.async {
-                self?.isSessionRunning = false
-            }
-        }
-    }
-
-    // MARK: - Camera Settings
-    func applyCameraSettings(_ settings: CameraSettings) {
-        guard let device = currentCamera else { return }
-
-        do {
-            try device.lockForConfiguration()
-
-            // ISO 설정
-            if let iso = settings.iso {
-                let isoValue = Float(iso)
-                let clampedISO = min(max(isoValue, device.activeFormat.minISO), device.activeFormat.maxISO)
-                device.setExposureModeCustom(duration: AVCaptureDevice.currentExposureDuration, iso: clampedISO)
-                currentISO = clampedISO
-            }
-
-            // 노출 보정 (EV)
-            if let ev = settings.evCompensation {
-                let evValue = Float(ev)
-                let clampedEV = min(max(evValue, device.minExposureTargetBias), device.maxExposureTargetBias)
-                device.setExposureTargetBias(clampedEV)
-                currentExposureCompensation = clampedEV
-            }
-
-            // 화이트밸런스 (Kelvin)
-            if let kelvin = settings.wbKelvin {
-                // AVFoundation은 Kelvin 직접 설정을 지원하지 않으므로
-                // Temperature/Tint 기반으로 근사치 설정
-                let temp = kelvinToTemperature(kelvin)
-                let gains = AVCaptureDevice.WhiteBalanceGains(
-                    redGain: temp.red,
-                    greenGain: 1.0,
-                    blueGain: temp.blue
-                )
-                device.setWhiteBalanceModeLocked(with: gains)
-            }
-
-            device.unlockForConfiguration()
-
-        } catch {
-            print("❌ Failed to apply camera settings: \(error)")
-        }
-    }
-
-    // Kelvin을 RGB gain으로 근사 변환
-    private func kelvinToTemperature(_ kelvin: Int) -> (red: Float, blue: Float) {
-        switch kelvin {
-        case ..<3500:
-            return (2.2, 1.1)
-        case 3500..<4500:
-            return (1.8, 1.3)
-        case 4500..<5500:
-            return (1.5, 1.5)
-        case 5500..<6500:
-            return (1.3, 1.8)
-        default:
-            return (1.1, 2.2)
-        }
-    }
-
-    // MARK: - Camera Switch
-    func switchCamera() {
-        guard let input = currentInput else { return }
-
-        session.beginConfiguration()
-
-        // 현재 입력 제거
-        session.removeInput(input)
-
-        // 반대 카메라 선택
-        let newPosition: AVCaptureDevice.Position = (currentCamera?.position == .back) ? .front : .back
-
-        guard let newCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition) else {
-            session.commitConfiguration()
-            return
-        }
-
-        do {
-            let newInput = try AVCaptureDeviceInput(device: newCamera)
-            if session.canAddInput(newInput) {
-                session.addInput(newInput)
-                currentInput = newInput
-                currentCamera = newCamera
-                isFrontCamera = (newPosition == .front)  // 카메라 위치 업데이트
-
-                // 전면/후면 카메라에 따라 미러링 설정
-                if let connection = videoOutput.connection(with: .video) {
-                    // 전면 카메라: 미러링 활성화 (거울처럼)
-                    // 후면 카메라: 미러링 비활성화
-                    connection.isVideoMirrored = (newPosition == .front)
-
-                    // 전면/후면 모두 portrait 방향 사용
-                    connection.videoOrientation = .portrait
-                }
-            }
-        } catch {
-            print("❌ Failed to switch camera: \(error)")
-        }
-
-        session.commitConfiguration()
-    }
-
-    // MARK: - Photo Capture (실제 사진 촬영)
-
-    /// 사진 촬영 (현재 줌/설정 그대로 촬영)
-    func capturePhoto(completion: @escaping (Data?, Error?) -> Void) {
-        guard isSessionRunning else {
-            completion(nil, NSError(domain: "CameraManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "카메라 세션이 실행 중이 아닙니다"]))
-            return
-        }
-
-        photoCaptureCompletion = completion
-
-        // 사진 설정
-        var settings = AVCapturePhotoSettings()
-
-        // JPEG 포맷
-        if photoOutput.availablePhotoCodecTypes.contains(.jpeg) {
-            settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
-        }
-
-        // 고해상도 사진 (iOS 버전에 따라)
-        if #available(iOS 16.0, *) {
-            settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
-        } else {
-            settings.isHighResolutionPhotoEnabled = photoOutput.isHighResolutionCaptureEnabled
-        }
-
-        // 플래시 설정
-        if let device = currentCamera, device.hasFlash {
-            settings.flashMode = isFlashOn ? .on : .off
-        }
-
-        // 사진 촬영
-        photoOutput.capturePhoto(with: settings, delegate: self)
-
-        print("📸 사진 촬영 시작 (줌: \(virtualZoom)x, 초점거리: \(focalLengthIn35mm)mm)")
-    }
-
-    // MARK: - Flash Control
-    func toggleFlash() {
-        guard let device = currentCamera else { return }
-
-        guard device.hasTorch && device.hasFlash else {
-            print("⚠️ Flash not available on this camera")
-            return
-        }
-
-        do {
-            try device.lockForConfiguration()
-
-            if isFlashOn {
-                // Flash OFF
-                if device.torchMode == .on {
-                    device.torchMode = .off
-                }
-                isFlashOn = false
-            } else {
-                // Flash ON
-                if device.isTorchModeSupported(.on) {
-                    device.torchMode = .on
-                }
-                isFlashOn = true
-            }
-
-            device.unlockForConfiguration()
-        } catch {
-            print("❌ Failed to toggle flash: \(error)")
-        }
-    }
-
-    // MARK: - Zoom Control (Virtual Device 심리스 줌)
-
-    /// 가상 줌 팩터 (사용자에게 표시되는 값: 0.5x, 1x, 2x 등)
-    @Published var virtualZoom: CGFloat = 1.0
-
-    /// 사용자 표시 줌 → 실제 videoZoomFactor 변환
-    private func displayZoomToDeviceZoom(_ displayZoom: CGFloat) -> CGFloat {
-        // Virtual Device에서:
-        // - 사용자 0.5x = videoZoomFactor 1.0 (초광각)
-        // - 사용자 1.0x = videoZoomFactor 2.0 (광각) = wideAngleZoomFactor
-        // - 사용자 2.0x = videoZoomFactor 4.0 (망원) = telephotoZoomFactor
-
-        if !isUsingVirtualDevice {
-            return displayZoom  // Virtual Device 아니면 그대로
-        }
-
-        // 0.5x 기준으로 스케일 계산 (0.5x = 1.0, 1.0x = 2.0, 2.0x = 4.0)
-        return displayZoom * wideAngleZoomFactor
-    }
-
-    /// 실제 videoZoomFactor → 사용자 표시 줌 변환
-    private func deviceZoomToDisplayZoom(_ deviceZoom: CGFloat) -> CGFloat {
-        if !isUsingVirtualDevice {
-            return deviceZoom
-        }
-        return deviceZoom / wideAngleZoomFactor
-    }
-
-    /// 줌 설정 (사용자 표시 줌 기준, 예: 0.5, 1.0, 2.0)
-    func setZoom(_ displayFactor: CGFloat) {
-        guard let device = currentCamera else { return }
-
-        // 사용자 표시 줌 → 실제 디바이스 줌으로 변환
-        let deviceFactor = displayZoomToDeviceZoom(displayFactor)
-        let clampedFactor = max(minZoomFactor, min(deviceFactor, maxZoomFactor))
-
-        do {
-            try device.lockForConfiguration()
-
-            // 핀치 줌: 빠른 반응
-            device.ramp(toVideoZoomFactor: clampedFactor, withRate: 150.0)
-
-            currentZoom = clampedFactor
-            virtualZoom = deviceZoomToDisplayZoom(clampedFactor)
-
-            updateCurrentLensDisplay(for: clampedFactor)
-
-            device.unlockForConfiguration()
-        } catch {
-            print("❌ Failed to set zoom: \(error)")
-        }
-    }
-
-    /// 핀치 줌 적용
-    func applyPinchZoom(_ scale: CGFloat) {
-        let newDisplayZoom = virtualZoom * scale
-        setZoom(newDisplayZoom)
-    }
-
-    /// 특정 배율로 부드럽게 줌 (버튼 클릭 시, 사용자 표시 줌 기준)
-    func setZoomAnimated(_ displayFactor: CGFloat) {
-        guard let device = currentCamera else { return }
-
-        let deviceFactor = displayZoomToDeviceZoom(displayFactor)
-        let clampedFactor = max(minZoomFactor, min(deviceFactor, maxZoomFactor))
-
-        do {
-            try device.lockForConfiguration()
-
-            // 버튼 클릭 시 더 부드러운 전환
-            device.ramp(toVideoZoomFactor: clampedFactor, withRate: 30.0)
-
-            currentZoom = clampedFactor
-            virtualZoom = deviceZoomToDisplayZoom(clampedFactor)
-
-            updateCurrentLensDisplay(for: clampedFactor)
-
-            device.unlockForConfiguration()
-        } catch {
-            print("❌ Failed to set zoom: \(error)")
-        }
-    }
-
-    /// 현재 줌에 따라 렌즈 표시 업데이트 (실제 videoZoomFactor 기준)
-    private func updateCurrentLensDisplay(for deviceZoom: CGFloat) {
-        // 실제 videoZoomFactor 기준으로 렌즈 결정
-        if deviceZoom < wideAngleZoomFactor {
-            currentLens = .ultraWide
-        } else if deviceZoom >= telephotoZoomFactor && availableCameras[.telephoto] != nil {
-            currentLens = .telephoto
-        } else {
-            currentLens = .wide
-        }
-    }
-
-    // MARK: - Lens Control (버튼으로 렌즈 전환)
-
-    /// 특정 렌즈로 전환 (사용자 표시 줌 기준: 0.5x, 1x, 2x)
-    func switchLens(to lens: CameraLensType) {
-        guard !isFrontCamera else {
-            print("⚠️ 전면 카메라에서는 렌즈 전환 불가")
-            return
-        }
-
-        // 사용자 표시 줌으로 전환 (0.5, 1.0, 2.0)
-        // setZoomAnimated가 내부에서 실제 deviceZoom으로 변환
-        setZoomAnimated(lens.zoomFactor)
-    }
-
-    /// 다음 렌즈로 순환 전환 (0.5x → 1x → 2x → 0.5x ...)
-    func cycleToNextLens() {
-        guard availableLenses.count > 1 else { return }
-
-        if let currentIndex = availableLenses.firstIndex(of: currentLens) {
-            let nextIndex = (currentIndex + 1) % availableLenses.count
-            let nextLens = availableLenses[nextIndex]
-            switchLens(to: nextLens)
-        }
-    }
-
-    // MARK: - EXIF Data (35mm 환산 초점거리)
-
-    /// 현재 35mm 환산 초점거리 (EXIF용)
-    /// 실제 카메라 FOV에서 계산된 baseFocalLength35mm 사용
+    
+    // MARK: - EXIF Info
     var focalLengthIn35mm: Int {
-        // 전면 카메라는 고정 24mm (광각)
-        if isFrontCamera {
-            return 24
+        if isFrontCamera { return 24 } // 전면 고정값
+
+        // 현재 물리 렌즈의 35mm 환산 초점거리
+        let baseFocal35mm: Int
+        switch currentLens {
+        case .ultraWide:
+            baseFocal35mm = 13  // 초광각 13mm
+        case .wide:
+            baseFocal35mm = 24  // 광각 24mm (기본 카메라와 동일)
+        case .telephoto:
+            baseFocal35mm = 77  // 망원 77mm (3배줌 기준)
         }
-        // 후면 카메라: baseFocalLength35mm × virtualZoom
-        // baseFocalLength35mm는 analyzeCameraCharacteristics에서 실제 FOV로 계산됨
-        return Int(round(baseFocalLength35mm * virtualZoom))
+
+        // 디지털 줌 적용 (물리 렌즈 기준에서 추가 확대)
+        // 예: wide(24mm) + 2배 디지털 줌 = 48mm
+        return Int(round(Double(baseFocal35mm) * Double(virtualZoom)))
     }
 
-    /// 1x 줌에서의 35mm 환산 초점거리 (디바이스 실제 값)
-    var baseWide35mm: Int {
-        return Int(round(baseFocalLength35mm))
-    }
-
-    /// 현재 렌즈의 실제 초점거리 (mm)
-    /// iPhone 광각 = 약 6.86mm (센서 기준)
     var actualFocalLength: Double {
-        // 전면 카메라
+        // 실제 물리적 초점거리 (mm) - 센서 크기 반영
         if isFrontCamera {
-            return 2.71  // iPhone 전면 카메라 대략적 값
+            return 2.71  // 전면 카메라 고정값
         }
-        // 후면 카메라: 기본 6.86mm × virtualZoom
-        return 6.86 * virtualZoom
+
+        // 후면 카메라: 현재 물리 렌즈의 실제 초점거리
+        let baseFocal: Double
+        switch currentLens {
+        case .ultraWide:
+            baseFocal = 1.54  // 초광각 1.54mm (13mm in 35mm)
+        case .wide:
+            baseFocal = 4.25  // 광각 4.25mm (24mm in 35mm) - 기본 카메라
+        case .telephoto:
+            baseFocal = 9.0   // 망원 9.0mm (77mm in 35mm, 3배줌)
+        }
+
+        return baseFocal  // 실제 초점거리는 물리 렌즈 값만 반환 (디지털 줌 미적용)
     }
 
-    // MARK: - Aspect Ratio Control
+    var currentAperture: Double {
+        // 조리개값 (f-number) - 렌즈별 고정값
+        if isFrontCamera {
+            return 2.2  // 전면 카메라 f/2.2
+        }
+
+        switch currentLens {
+        case .ultraWide:
+            return 2.4   // 초광각 f/2.4
+        case .wide:
+            return 1.78  // 광각 f/1.78 (기본 카메라)
+        case .telephoto:
+            return 2.8   // 망원 f/2.8
+        }
+    }
+
+    // 사진 촬영, 플래시 등 나머지 기능은 기존 유지
+    func capturePhoto(completion: @escaping (Data?, Error?) -> Void) {
+        guard isSessionRunning else { return }
+        photoCaptureCompletion = completion
+        let settings = AVCapturePhotoSettings()
+        settings.flashMode = (isFlashOn && currentCamera?.hasFlash == true) ? .on : .off
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+    
+    func toggleFlash() {
+        guard let device = currentCamera, device.hasTorch else { return }
+        try? device.lockForConfiguration()
+        if device.torchMode == .on {
+            device.torchMode = .off
+            isFlashOn = false
+        } else {
+            try? device.setTorchModeOn(level: 1.0)
+            isFlashOn = true
+        }
+        device.unlockForConfiguration()
+    }
+
+    // MARK: - Aspect Ratio & Focus
     func setAspectRatio(_ ratio: CameraAspectRatio) {
-        guard aspectRatio != ratio else { return }
-
-        aspectRatio = ratio
-
-        // 세션 재구성
-        session.beginConfiguration()
-
-        // 현재 카메라로 해당 비율에 맞는 포맷 설정
-        if let camera = currentCamera {
-            configureFormatForAspectRatio(ratio, device: camera)
+        // 🔥 UI 상태만 업데이트 (하드웨어 포맷 변경 X -> 깜빡임 제거)
+        // 4:3 센서를 그대로 사용하고, UI에서 마스킹함.
+        DispatchQueue.main.async {
+            self.aspectRatio = ratio
         }
-
-        session.commitConfiguration()
-
-        print("📷 Camera aspect ratio changed to: \(ratio.rawValue)")
     }
 
-    // 비율에 맞는 포맷 설정
     private func configureFormatForAspectRatio(_ ratio: CameraAspectRatio, device: AVCaptureDevice) {
         let targetRatio: Float
         switch ratio {
         case .ratio16_9: targetRatio = 16.0 / 9.0
         case .ratio4_3: targetRatio = 4.0 / 3.0
-        case .ratio1_1: targetRatio = 4.0 / 3.0  // 1:1은 4:3에서 크롭
+        case .ratio1_1: targetRatio = 4.0 / 3.0  // 1:1은 4:3을 크롭해서 사용
         }
 
+        // 비율에 맞는 포맷 필터링
         let formats = device.formats.filter { format in
-            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let mediaType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
-
             let isVideoFormat = mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
                                mediaType == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-
-            guard isVideoFormat && dimensions.height >= 1080 else { return false }
-
-            // 해당 비율과 일치하는지 확인
-            let formatRatio = Float(dimensions.width) / Float(dimensions.height)
-            return abs(formatRatio - targetRatio) < 0.01
+            guard isVideoFormat && dim.height >= 1080 else { return false }
+            let fr = Float(dim.width) / Float(dim.height)
+            return abs(fr - targetRatio) < 0.01
         }
 
-        // 적당한 해상도 선호 (3~4백만 픽셀)
+        // 🔥 60fps 지원하는 포맷 우선 선택
         let sortedFormats = formats.sorted { f1, f2 in
+            // FPS 범위 확인
+            let maxFPS1 = f1.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+            let maxFPS2 = f2.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
+
+            // 60fps 지원 여부를 최우선
+            if maxFPS1 >= 60 && maxFPS2 < 60 { return true }
+            if maxFPS1 < 60 && maxFPS2 >= 60 { return false }
+
+            // 해상도는 적당한 크기 선호 (3MP 근처)
             let d1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription)
             let d2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription)
-
-            let pixels1 = Int(d1.width) * Int(d1.height)
-            let pixels2 = Int(d2.width) * Int(d2.height)
-
-            let optimal = 3_000_000
-            return abs(pixels1 - optimal) < abs(pixels2 - optimal)
+            let p1 = Int(d1.width) * Int(d1.height)
+            let p2 = Int(d2.width) * Int(d2.height)
+            return abs(p1 - 3_000_000) < abs(p2 - 3_000_000)
         }
 
         if let bestFormat = sortedFormats.first {
@@ -870,180 +725,99 @@ class CameraManager: NSObject, ObservableObject {
                 try device.lockForConfiguration()
                 device.activeFormat = bestFormat
 
-                // 가능한 최대 fps
+                // 🔥 60fps 설정 (매우 중요!)
                 if let maxFPSRange = bestFormat.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
-                    let fps = min(maxFPSRange.maxFrameRate, 60.0)
-                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
-                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+                    let targetFPS = min(maxFPSRange.maxFrameRate, 60.0)
+                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                    print("✅ 화면비 변경: \(ratio) @ \(targetFPS)fps")
                 }
 
                 device.unlockForConfiguration()
-
-                let dimensions = CMVideoFormatDescriptionGetDimensions(bestFormat.formatDescription)
-                let maxFPS = bestFormat.videoSupportedFrameRateRanges.map { $0.maxFrameRate }.max() ?? 0
-                print("📷 포맷 변경: \(dimensions.width)x\(dimensions.height) (\(ratio.rawValue)) @ \(Int(maxFPS))fps")
             } catch {
-                print("❌ 포맷 변경 실패: \(error)")
+                print("❌ 화면비 포맷 설정 실패: \(error)")
             }
-        } else {
-            // fallback: preset 사용
-            switch ratio {
-            case .ratio16_9:
-                if session.canSetSessionPreset(.hd1920x1080) {
-                    session.sessionPreset = .hd1920x1080
-                }
-            case .ratio4_3, .ratio1_1:
-                if session.canSetSessionPreset(.photo) {
-                    session.sessionPreset = .photo
-                }
-            }
-            print("📷 preset fallback: \(ratio.rawValue)")
         }
     }
-    
-    // MARK: - Focus & Exposure Control (탭 투 포커스) 🔥 추가됨 🔥
 
-    /// 특정 좌표(0.0 ~ 1.0)에 초점 및 노출 맞추기
     func setFocus(at point: CGPoint) {
         guard let device = currentCamera else { return }
-
         do {
             try device.lockForConfiguration()
-
-            // 1. 초점(Focus) 설정
-            if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.autoFocus) {
+            if device.isFocusPointOfInterestSupported {
                 device.focusPointOfInterest = point
                 device.focusMode = .autoFocus
             }
-
-            // 2. 노출(Exposure) 설정 (밝기 조절)
-            if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
+            if device.isExposurePointOfInterestSupported {
                 device.exposurePointOfInterest = point
                 device.exposureMode = .autoExpose
             }
-
-            // 3. 피사체 변경 감지 (카메라를 심하게 움직이면 다시 오토포커스로 전환)
             device.isSubjectAreaChangeMonitoringEnabled = true
-
             device.unlockForConfiguration()
-            print("🎯 포커스/노출 설정 완료: \(point)")
-
         } catch {
             print("❌ 포커스 설정 실패: \(error)")
         }
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+// MARK: - Delegate Extensions
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        let frameStart = CACurrentMediaTime()  // 🔍 프로파일링
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // 1. Send straight to analysis pipeline (Background Thread)
+        frameSubject.send(sampleBuffer)
+        
+        guard let _ = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-        // 🔥 타임스탬프 체크로 중복 버퍼 방지
+        // 중복 버퍼 방지 (Timestamp check)
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
         if timestamp == lastBufferTime { return }
         lastBufferTime = timestamp
 
-        // CVPixelBuffer → UIImage 변환 (최적화된 방식)
-        let convertStart = CACurrentMediaTime()  // 🔍
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-
-        // 재사용 가능한 ciContext 사용
-        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
-        let convertEnd = CACurrentMediaTime()  // 🔍
-
-        // 디바이스 방향에 따라 적절한 orientation 설정
-        let deviceOrientation = UIDevice.current.orientation
-        var imageOrientation: UIImage.Orientation = .right  // 기본값 (세로)
-
-        // 후면 카메라 기준으로 orientation 매핑
-        if currentCamera?.position == .back {
-            switch deviceOrientation {
-            case .portrait:
-                imageOrientation = .up
-            case .portraitUpsideDown:
-                imageOrientation = .down
-            case .landscapeLeft:
-                imageOrientation = .right  // landscapeRight와 같은 값 사용
-            case .landscapeRight:
-                imageOrientation = .right
-            default:
-                imageOrientation = .up
-            }
-        } else {
-            // 전면 카메라: 화면에 보이는 그대로 저장 (회전 없음)
-            switch deviceOrientation {
-            case .portrait:
-                imageOrientation = .up  // 회전 없음
-            case .portraitUpsideDown:
-                imageOrientation = .down
-            case .landscapeLeft:
-                imageOrientation = .up
-            case .landscapeRight:
-                imageOrientation = .up
-            default:
-                imageOrientation = .up
-            }
-        }
-
-        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: imageOrientation)
-
-        let frameEnd = CACurrentMediaTime()  // 🔍
-
-        // FPS 계산
+        // FPS 계산 (Throttled update)
         fpsFrameCount += 1
         let now = Date()
         let elapsed = now.timeIntervalSince(lastFPSUpdate)
-
         if elapsed >= 1.0 {
             let fps = Double(fpsFrameCount) / elapsed
-
-            // 🔍 프로파일링 로그 (1초마다)
-            let convertTime = (convertEnd - convertStart) * 1000
-            let totalTime = (frameEnd - frameStart) * 1000
-            print("📊 [CameraManager] 이미지변환: \(String(format: "%.1f", convertTime))ms, 총: \(String(format: "%.1f", totalTime))ms, FPS: \(String(format: "%.1f", fps))")
-
+            // UI Update on Main Thread
             DispatchQueue.main.async { [weak self] in
                 self?.currentFPS = fps
             }
             fpsFrameCount = 0
             lastFPSUpdate = now
         }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.currentFrame = image
+        
+        // 2. Optional: Create UIImage for UI Preview *only if needed* (e.g. for small thumbnail or specific logic)
+        // Since we use AVCaptureVideoPreviewLayer, we DO NOT need to convert every frame to UIImage for the main preview.
+        // If ContentView needs `currentFrame` for some other logic (like analysis visualization overlay), we can throttle it here.
+        
+        /*
+        // 이미지 변환 (Expensive!)
+        // Only do this if strictly necessary for UI other than preview
+        /*
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
+        
+        // ... (Orientation logic) ...
+        
+        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: imageOrientation)
+        
+        // Send to UI stream (Throttled)
+        let currentTime = CACurrentMediaTime()
+        if currentTime - lastFrameUpdateTime >= minFrameUpdateInterval {
+            lastFrameUpdateTime = currentTime
+            DispatchQueue.main.async { [weak self] in
+                 self?.frameImageSubject.send(image)
+            }
         }
+        */
+         */
     }
 }
 
-// MARK: - AVCapturePhotoCaptureDelegate (실제 사진 촬영)
 extension CameraManager: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            print("❌ 사진 촬영 실패: \(error.localizedDescription)")
-            photoCaptureCompletion?(nil, error)
-            photoCaptureCompletion = nil
-            return
-        }
-
-        // JPEG 데이터 추출
-        guard let imageData = photo.fileDataRepresentation() else {
-            print("❌ 사진 데이터 변환 실패")
-            photoCaptureCompletion?(nil, NSError(domain: "CameraManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "사진 데이터 변환 실패"]))
-            photoCaptureCompletion = nil
-            return
-        }
-
-        print("✅ 사진 촬영 성공 (\(imageData.count / 1024)KB)")
-
-        // 콜백 호출
-        photoCaptureCompletion?(imageData, nil)
-        photoCaptureCompletion = nil
+        let data = photo.fileDataRepresentation()
+        photoCaptureCompletion?(data, error)
     }
 }

@@ -1,12 +1,14 @@
 import SwiftUI
 import Photos
 import ImageIO
-import MobileCoreServices
+import UniformTypeIdentifiers
+import Combine
 
 struct ContentView: View {
     // MARK: - State
     @Binding var referenceImage: UIImage?  // 레퍼런스 이미지 (MainTabView에서 전달)
     @Binding var referenceImageData: Data?  // 🆕 EXIF 추출용 원본 데이터
+    var isActiveTab: Bool = true  // 현재 탭이 활성화 상태인지 (MainTabView에서 전달)
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var realtimeAnalyzer = RealtimeAnalyzer()  // 실시간 분석
     @StateObject private var thermalManager = ThermalStateManager()  // 🔥 발열/배터리 관리
@@ -16,7 +18,12 @@ struct ContentView: View {
     @State private var isAnalyzing = false
     @State private var errorMessage: String?
     @State private var analysisTimer: Timer?
-    @State private var frameUpdateTimer: Timer?  // 실시간 프레임 분석용
+
+    // @State private var frameUpdateTimer: Timer?  <- REMOVED: Using Combine
+
+    // 🔥 UI 반응성 개선: 초기화 상태 관리
+    @State private var isInitializing = true  // 초기화 중 플래그
+    @State private var appLaunchTime = Date()  // 앱 시작 시간
 
     // UI 상태
     @State private var showGrid = false
@@ -76,22 +83,16 @@ struct ContentView: View {
 
     // 사진 촬영 (실제 카메라 촬영 사용)
     private func performCapture() {
-        // 플래시 효과
-        withAnimation(.easeInOut(duration: 0.2)) {
-            showCaptureFlash = true
-        }
-
         // 🆕 실제 카메라로 사진 촬영 (줌 배율 그대로 적용)
         cameraManager.capturePhoto { [self] imageData, error in
-            DispatchQueue.main.async {
-                // 플래시 효과 제거
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showCaptureFlash = false
-                }
-
+            // ✅ 이미지 처리를 백그라운드로 이동 (메인 스레드 프리징 방지)
+            DispatchQueue.global(qos: .userInitiated).async {
+                // 에러 체크
                 if let error = error {
                     print("❌ 촬영 실패: \(error.localizedDescription)")
-                    errorMessage = "촬영 실패: \(error.localizedDescription)"
+                    DispatchQueue.main.async {
+                        errorMessage = "촬영 실패: \(error.localizedDescription)"
+                    }
                     return
                 }
 
@@ -101,20 +102,25 @@ struct ContentView: View {
                     return
                 }
 
-                // 비율에 맞게 크롭
+                // 🔥 무거운 작업: 이미지 크롭 (백그라운드)
                 let croppedImage = cropImage(originalImage, to: selectedAspectRatio)
 
-                // 미리보기 이미지 설정
-                capturedImage = croppedImage
+                // 메인 스레드에서 UI만 업데이트
+                DispatchQueue.main.async {
+                    // 미리보기 이미지 설정
+                    capturedImage = croppedImage
 
-                // 🆕 EXIF 포함하여 저장 (원본 데이터에 이미 EXIF가 포함됨)
-                savePhotoDataToLibrary(imageData, croppedImage: croppedImage)
+                    print("📸 사진 촬영 완료! (줌: \(cameraManager.virtualZoom)x, 초점거리: \(cameraManager.focalLengthIn35mm)mm)")
 
-                print("📸 사진 촬영 완료! (줌: \(cameraManager.virtualZoom)x, 초점거리: \(cameraManager.focalLengthIn35mm)mm)")
+                    // 5초 후 다시 촬영 가능
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                        capturedImage = nil
+                    }
+                }
 
-                // 5초 후 다시 촬영 가능
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                    capturedImage = nil
+                // 🔥 무거운 작업: EXIF 포함 저장 (최저 우선순위 백그라운드)
+                DispatchQueue.global(qos: .background).async {
+                    savePhotoDataToLibrary(imageData, croppedImage: croppedImage)
                 }
             }
         }
@@ -162,34 +168,67 @@ struct ContentView: View {
 
     // 이미지를 선택한 비율로 크롭
     private func cropImage(_ image: UIImage, to aspectRatio: CameraAspectRatio) -> UIImage {
-        guard let cgImage = image.cgImage else { return image }
-
-        let imageWidth = CGFloat(cgImage.width)
-        let imageHeight = CGFloat(cgImage.height)
-        let targetRatio = aspectRatio.ratio  // 가로:세로 비율 (예: 4:3 = 1.333)
-
-        var cropRect: CGRect
-
-        // fixedOrientation() 후의 이미지는 세로 모드
-        // 세로 모드에서의 가로:세로 비율 계산
-        let currentRatio = imageWidth / imageHeight  // 예: 3024 / 4032 = 0.75
-        let targetVerticalRatio = 1.0 / targetRatio   // 예: 3/4 = 0.75
-
-        if currentRatio > targetVerticalRatio {
-            // 이미지가 목표보다 더 가로로 넓으면 (또는 덜 세로로 길면), 좌우를 크롭
-            let targetWidth = imageHeight * targetVerticalRatio
-            let xOffset = (imageWidth - targetWidth) / 2
-            cropRect = CGRect(x: xOffset, y: 0, width: targetWidth, height: imageHeight)
-        } else {
-            // 이미지가 목표보다 더 세로로 길면, 위아래를 크롭
-            let targetHeight = imageWidth / targetVerticalRatio
-            let yOffset = (imageHeight - targetHeight) / 2
-            cropRect = CGRect(x: 0, y: yOffset, width: imageWidth, height: targetHeight)
+        // 1. 이미지 회전 보정 (정방향으로 그리기)
+        // 백그라운드 스레드에서 실행되므로 UIGraphicsImageRenderer 사용 가능 (iOS 10+)
+        // 원본 해상도 유지
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+        
+        let normalizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
         }
-
-        guard let croppedCGImage = cgImage.cropping(to: cropRect) else { return image }
-
-        return UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
+        
+        guard let cgImage = normalizedImage.cgImage else { return image }
+        
+        // 2. 논리적 좌표계(회전 보정됨)에서의 크기
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let currentRatio = width / height
+        let targetRatio = aspectRatio.ratio // 4:3(1.33), 16:9(1.77)
+        
+        // 3. 목표 비율에 맞는 크롭 영역 계산 (세로 모드 기준: 1.0 / targetRatio 역수 사용 아님)
+        // 여기서는 이미 정방향(세로)이므로, 목표 비율도 세로 비율(Short/Long)을 따르거나,
+        // 가로가 짧은 세로 사진(Portrait)이라면 aspect ratio는 (Width < Height)이므로 3/4(0.75), 9/16(0.56)가 됨.
+        
+        // CameraAspectRatio가 정의한 .ratio 값:
+        // .ratio4_3 = 4/3 (1.33)
+        // .ratio16_9 = 16/9 (1.77)
+        // .ratio1_1 = 1.0
+        
+        // 현재 이미지가 Portrait (W < H) 인지 Landscape (W > H) 인지 확인
+        let isPortrait = width < height
+        
+        // 목표 비율 (긴변 / 짧은변)
+        // 4:3 -> 1.333
+        // 16:9 -> 1.777
+        let targetLongOverShort = targetRatio >= 1 ? targetRatio : 1.0/targetRatio
+        
+        // 실제 적용할 가로/세로 비율
+        // Portrait라면: Width / Height = 1 / targetLongOverShort (0.75, 0.56)
+        // Landscape라면: Width / Height = targetLongOverShort (1.33, 1.77)
+        let targetWH = isPortrait ? (1.0 / targetLongOverShort) : targetLongOverShort
+        
+        var cropRect: CGRect
+        
+        if currentRatio > targetWH {
+            // 현재가 더 넓적함 (가로를 잘라내야 함)
+            // Height 기준, Width를 줄임
+            let targetWidth = height * targetWH
+            let xOffset = (width - targetWidth) / 2
+            cropRect = CGRect(x: xOffset, y: 0, width: targetWidth, height: height)
+        } else {
+            // 현재가 더 길쭉함 (세로를 잘라내야 함)
+            // Width 기준, Height를 줄임
+            let targetHeight = width / targetWH
+            let yOffset = (height - targetHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: width, height: targetHeight)
+        }
+        
+        // 4. 크롭 실행
+        guard let croppedCG = cgImage.cropping(to: cropRect) else { return image }
+        
+        return UIImage(cgImage: croppedCG, scale: normalizedImage.scale, orientation: .up)
     }
 
     // 🔧 사진을 EXIF 데이터와 함께 저장
@@ -236,6 +275,7 @@ struct ContentView: View {
             kCGImagePropertyExifDateTimeDigitized as String: dateString,
             kCGImagePropertyExifFocalLenIn35mmFilm as String: cameraManager.focalLengthIn35mm,
             kCGImagePropertyExifFocalLength as String: cameraManager.actualFocalLength,
+            kCGImagePropertyExifFNumber as String: cameraManager.currentAperture,  // 조리개값
             kCGImagePropertyExifLensMake as String: "Apple",
             kCGImagePropertyExifLensModel as String: getLensModelString(),
             kCGImagePropertyExifColorSpace as String: 1,  // sRGB
@@ -266,15 +306,17 @@ struct ContentView: View {
             return "iPhone Front Camera"
         }
 
-        let zoom = cameraManager.virtualZoom
         let focalLength = cameraManager.focalLengthIn35mm
+        let aperture = String(format: "%.2f", cameraManager.currentAperture)
 
-        if zoom < 0.7 {
-            return "iPhone Ultra Wide Camera \(focalLength)mm"
-        } else if zoom > 2.5 {
-            return "iPhone Telephoto Camera \(focalLength)mm"
-        } else {
-            return "iPhone Wide Camera \(focalLength)mm"
+        // currentLens에 따라 정확한 렌즈 이름 반환
+        switch cameraManager.currentLens {
+        case .ultraWide:
+            return "iPhone \(focalLength)mm f/\(aperture)"  // 예: "iPhone 13mm f/2.40"
+        case .wide:
+            return "iPhone \(focalLength)mm f/\(aperture)"  // 예: "iPhone 24mm f/1.78"
+        case .telephoto:
+            return "iPhone \(focalLength)mm f/\(aperture)"  // 예: "iPhone 77mm f/2.80"
         }
     }
 
@@ -305,7 +347,7 @@ struct ContentView: View {
 
         guard let destination = CGImageDestinationCreateWithData(
             mutableData,
-            kUTTypeJPEG,
+            UTType.jpeg.identifier as CFString,
             1,
             nil
         ) else { return nil }
@@ -358,51 +400,75 @@ struct ContentView: View {
 
             ZStack {
                 // 1. 카메라 프리뷰 (비율에 따라 캡처 영역 표시)
+                // 1. 카메라 프리뷰 (비율에 따라 캡처 영역 표시)
                 if cameraManager.isAuthorized {
-                ZStack {
-                    // 전체 화면 카메라 프리뷰
-                    CameraView(cameraManager: cameraManager)
-                        .ignoresSafeArea()
+                    ZStack {
+                        // 전체 화면 카메라 프리뷰
+                        CameraView(cameraManager: cameraManager)
+                            .ignoresSafeArea()
 
-                    // 비율에 따른 마스크 오버레이 (캡처되지 않는 영역 어둡게)
-                    AspectRatioMaskView(selectedRatio: selectedAspectRatio)
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                }
-                .onAppear {
-                    cameraManager.setupSession()
-                    cameraManager.startSession()
-                    setupBackgroundHandling()
-                }
-                .onDisappear {
-                    cameraManager.stopSession()
-                    stopAnalysis()
-                    stopRealtimeAnalysis()
-                    removeBackgroundHandling()
-                }
-            } else {
-                // 권한 없을 때
-                VStack(spacing: 20) {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.gray)
+                        // 비율에 따른 마스크 오버레이 (캡처되지 않는 영역 어둡게)
+                        AspectRatioMaskView(selectedRatio: selectedAspectRatio)
+                            .ignoresSafeArea()
+                            .allowsHitTesting(false)
+                    }
+                    .onAppear {
+                        appLaunchTime = Date()
+                        isInitializing = true
 
-                    Text("카메라 권한이 필요합니다")
-                        .font(.title3)
-                        .foregroundColor(.white)
+                        // 🔥 UI 반응성 개선: 백그라운드에서 카메라 초기화 후 시작
+                        cameraManager.setupSession {
+                            // setupSession 완료 후에만 startSession 호출
+                            self.cameraManager.startSession()
+                            
+                            // 🆕 Wire up RealtimeAnalyzer to Camera Stream directly
+                            self.realtimeAnalyzer.setupSubscription(
+                                framePublisher: self.cameraManager.frameSubject.eraseToAnyPublisher(),
+                                cameraManager: self.cameraManager
+                            )
+                            
+                            print("✅ 카메라 세션 설정 완료 및 시작 (Combine Wired)")
+                        }
+                        setupBackgroundHandling()
 
-                    Text("설정 > TryAngle > 카메라 허용")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                        // 🔥 3초 후 초기화 완료 표시 (UI 반응성 확보)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            isInitializing = false
+                            print("✅ 초기화 완료: UI 완전 활성화")
+                        }
+                    }
+                    .onDisappear {
+                        cameraManager.stopSession()
+                        stopAnalysis() // Uses private func
+                        realtimeAnalyzer.pauseAnalysis()
+                        removeBackgroundHandling()
+                    }
+                } else {
+                    // 권한 없을 때
+                    VStack(spacing: 20) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+
+                        Text("카메라 권한이 필요합니다")
+                            .font(.title3)
+                            .foregroundColor(.white)
+
+                        Text("설정 > TryAngle > 카메라 허용")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-            }
 
+            // 2. 그리드 오버레이
             // 2. 그리드 오버레이
             if showGrid {
                 GridOverlay()
-                    .ignoresSafeArea()
+                    .frame(height: captureHeight) // 🔥 비율에 맞게 높이 제한
+                    .clipped()
+                    .ignoresSafeArea() // safe area 무시는 유지하되, frame 제한이 우선됨
             }
 
             // 3. 피드백 오버레이 (실시간 + 서버 피드백 통합)
@@ -413,22 +479,28 @@ struct ContentView: View {
                 Spacer()
                     .frame(height: maskHeight)
 
-                // 피드백 표시 영역 (카메라 뷰박스 내부만)
-                FeedbackOverlay(
-                    feedbackItems: combinedFeedback,
-                    categoryStatuses: realtimeAnalyzer.categoryStatuses,
-                    completedFeedbacks: realtimeAnalyzer.completedFeedbacks,
-                    processingTime: processingTime,
-                    gateEvaluation: realtimeAnalyzer.gateEvaluation,  // 🆕 Gate System
-                    unifiedFeedback: realtimeAnalyzer.unifiedFeedback  // 🆕 통합 피드백
-                )
-                .frame(height: captureHeight)
-                .clipped()  // 뷰박스 밖으로 나가는 것 방지
-                .onChange(of: realtimeAnalyzer.instantFeedback) { newFeedback in
-                    updateCombinedFeedback()
-                }
-                .onChange(of: serverFeedbackItems) { _ in
-                    updateCombinedFeedback()
+                // ✅ 피드백 표시 영역 (레퍼런스 이미지가 있을 때만)
+                if referenceImage != nil {
+                    FeedbackOverlay(
+                        feedbackItems: combinedFeedback,
+                        categoryStatuses: realtimeAnalyzer.categoryStatuses,
+                        completedFeedbacks: realtimeAnalyzer.completedFeedbacks,
+                        processingTime: processingTime,
+                        gateEvaluation: realtimeAnalyzer.gateEvaluation,  // 🆕 Gate System
+                        unifiedFeedback: realtimeAnalyzer.unifiedFeedback  // 🆕 통합 피드백
+                    )
+                    .frame(height: captureHeight)
+                    .clipped()  // 뷰박스 밖으로 나가는 것 방지
+                    .onChange(of: realtimeAnalyzer.instantFeedback) { _, _ in
+                        updateCombinedFeedback()
+                    }
+                    .onChange(of: serverFeedbackItems) { _, _ in
+                        updateCombinedFeedback()
+                    }
+                } else {
+                    // 레퍼런스가 없을 때는 빈 공간
+                    Spacer()
+                        .frame(height: captureHeight)
                 }
 
                 // 하단 마스크 영역
@@ -548,23 +620,22 @@ struct ContentView: View {
             if referenceImage == nil {
                 VStack(spacing: 0) {
                     Spacer()
-                        .frame(height: safeAreaTop + screenHeight * 0.25)
+                        .frame(height: safeAreaTop + screenHeight * 0.15)
 
-                    Text("📸 레퍼런스 이미지를 선택하세요")
-                        .font(.title3)
-                        .fontWeight(.semibold)
+                    Text("레퍼런스 이미지를 선택하세요")
+                        .font(.caption)
+                        .fontWeight(.medium)
                         .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 16)
-                        .background(Color.blue.opacity(0.8))
-                        .cornerRadius(16)
-                        .shadow(radius: 10)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.7))
+                        .cornerRadius(8)
 
                     Text("하단 '레퍼런스' 탭에서\n따라 찍고 싶은 사진을 선택하세요")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
-                        .padding(.top, 8)
+                        .padding(.top, 6)
 
                     Spacer()
                 }
@@ -598,8 +669,6 @@ struct ContentView: View {
                                         .foregroundColor(.white)
                                 }
                             }
-                            .scaleEffect(showCaptureFlash ? 1.2 : 1.0)
-                            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: showCaptureFlash)
 
                             // 자동 촬영 카운트다운
                             if autoCapture {
@@ -617,14 +686,6 @@ struct ContentView: View {
 
                     Spacer()
                 }
-            }
-
-            // 촬영 플래시 효과
-            if showCaptureFlash {
-                Color.white
-                    .ignoresSafeArea()
-                    .opacity(0.8)
-                    .transition(.opacity)
             }
 
 
@@ -695,42 +756,11 @@ struct ContentView: View {
             VStack {
                 Spacer()
 
-                // 🆕 렌즈 선택 버튼 (0.5x, 1x, 2x) - 셔터 버튼 위
-                if !cameraManager.isFrontCamera && cameraManager.availableLenses.count > 1 {
-                    HStack(spacing: 8) {
-                        ForEach(cameraManager.availableLenses, id: \.self) { lens in
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    cameraManager.switchLens(to: lens)
-                                }
-                            }) {
-                                // 현재 렌즈면 실제 가상 줌 값 표시, 아니면 렌즈 기본값 표시
-                                let displayZoom = cameraManager.currentLens == lens ?
-                                    String(format: "%.1f", cameraManager.virtualZoom) :
-                                    lens.rawValue
-                                Text(displayZoom + "x")
-                                    .font(.system(size: 13, weight: cameraManager.currentLens == lens ? .bold : .medium))
-                                    .foregroundColor(cameraManager.currentLens == lens ? .yellow : .white)
-                                    .frame(width: 44, height: 44)
-                                    .background(
-                                        Circle()
-                                            .fill(cameraManager.currentLens == lens ?
-                                                  Color.black.opacity(0.6) : Color.black.opacity(0.3))
-                                    )
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(Color.black.opacity(0.3))
-                    )
-                    .padding(.bottom, 16)
-                }
+                // 🆕 렌즈 선택 버튼 (1x, 2x, 4x) - 셔터 버튼 위
+                LensSelector(cameraManager: cameraManager)
 
                 ZStack {
-                    // 셔터 버튼 (정중앙)
+                    // 셔터 버튼 (정중앙) - 항상 활성화
                     Button(action: {
                         performCapture()
                     }) {
@@ -740,18 +770,10 @@ struct ContentView: View {
                                 .frame(width: 80, height: 80)
 
                             Circle()
-                                .fill(capturedImage != nil ? Color.green : Color.white)
+                                .fill(Color.white)
                                 .frame(width: 68, height: 68)
-
-                            if capturedImage != nil {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
                         }
                     }
-                    .disabled(capturedImage != nil)
-                    .opacity(capturedImage != nil ? 0.8 : 1.0)
 
                     // 카메라 전환 (오른쪽 고정)
                     HStack {
@@ -810,95 +832,34 @@ struct ContentView: View {
 
             // 디버그 오버레이 (showFPS 활성화 시에만)
             if showFPS {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            // FPS
-                            Text(String(format: "%.1f FPS", cameraManager.currentFPS))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.ultraThinMaterial)
-                                .cornerRadius(6)
-
-                            // 🔥 발열 상태
-                            let thermalEmoji = thermalStateEmoji(thermalManager.currentThermalState)
-                            let targetFPS = Int(1.0 / thermalManager.recommendedAnalysisInterval)
-                            Text("\(thermalEmoji) 목표: \(targetFPS)fps")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(thermalColor(thermalManager.currentThermalState))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.ultraThinMaterial)
-                                .cornerRadius(6)
-
-                            // 🔋 배터리/저전력 모드
-                            if thermalManager.isLowPowerMode {
-                                Text("⚡️ 저전력")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.yellow)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(6)
-                            }
-
-                            // 레퍼런스 포즈 키포인트
-                            if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints {
-                                let visibleCount = refPose.filter { $0.confidence >= 0.5 }.count
-                                let color: Color = visibleCount >= 10 ? .green : (visibleCount >= 5 ? .yellow : .red)
-                                Text("레퍼런스: \(visibleCount)/\(refPose.count)개")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(color)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(6)
-                            }
-
-                            // 완성도
-                            if referenceImage != nil {
-                                let score = Int(realtimeAnalyzer.perfectScore * 100)
-                                Text("완성도: \(score)%")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(6)
-                            }
-                        }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 200)  // 하단 버튼 위에 표시
-                    }
-                }
+                DebugOverlay(
+                    cameraManager: cameraManager,
+                    thermalManager: thermalManager,
+                    realtimeAnalyzer: realtimeAnalyzer,
+                    referenceImage: referenceImage,
+                    thermalStateEmoji: thermalStateEmoji,
+                    thermalColor: thermalColor
+                )
             }
             }
         }
-        .onChange(of: realtimeAnalyzer.isPerfect) { isPerfect in
-            if isPerfect && autoCapture && capturedImage == nil {
+        .onChange(of: realtimeAnalyzer.isPerfect) { oldValue, newValue in
+            // ✅ 연속 촬영 가능: capturedImage 조건 제거
+            if newValue && autoCapture {
                 performCapture()
             }
         }
-        .onChange(of: selectedAspectRatio) { newRatio in
-            cameraManager.setAspectRatio(newRatio)
+        .onChange(of: selectedAspectRatio) { oldValue, newValue in
+            // 🔥 비동기 처리 (UI 블로킹 방지)
+            Task {
+                cameraManager.setAspectRatio(newValue)
 
-            // 비율 변경시 즉시 프레임 재분석하여 피드백 갱신
-            if let currentFrame = cameraManager.currentFrame {
-                // 🆕 줌 배율 업데이트 (35mm 환산 초점거리용)
-                realtimeAnalyzer.currentZoomFactor = cameraManager.virtualZoom
-
-                realtimeAnalyzer.analyzeFrame(
-                    currentFrame,
-                    isFrontCamera: cameraManager.isFrontCamera,
-                    currentAspectRatio: cameraManager.aspectRatio
-                )
+                // 비율 변경시 즉시 프레임 재분석 로직은 스트림이 알아서 처리함
+                // Force analysis update if needed? 
+                // Combine stream will pick up next frame with new ratio.
             }
         }
-        .onChange(of: referenceImage) { newImage in
+        .onChange(of: referenceImage) { _, newImage in
             // 레퍼런스 이미지 변경 시 분석 시작
             if let image = newImage {
                 print("🎯🎯🎯 레퍼런스 이미지 선택됨!")
@@ -914,13 +875,26 @@ struct ContentView: View {
                     print("❌ referenceAnalysis가 nil!")
                 }
 
-                // 실시간 분석 자동 시작
-                startRealtimeAnalysis()
+                // 실시간 분석 자동 시작 (Combine이 이미 연결되어 있으므로 분석 상태만 활성화)
+                // realtimeAnalyzer.resumeAnalysis() // If needed
                 print("🎯 실시간 피드백 모드 시작!")
             } else {
                 // 레퍼런스 이미지가 없으면 분석 중지
                 print("⏹️ 레퍼런스 제거됨 - 분석 중지")
-                stopRealtimeAnalysis()
+                // realtimeAnalyzer.pauseAnalysis() // If needed
+            }
+        }
+        .onChange(of: isActiveTab) { _, isActive in
+            // 탭 전환 감지: 카메라 탭으로 돌아오면 재개, 다른 탭으로 가면 중지
+            if isActive {
+                print("🎬 카메라 탭 활성화: 카메라 및 분석 재개")
+                cameraManager.resumeSession()
+                realtimeAnalyzer.resumeAnalysis()
+            } else {
+                print("⏸️ 카메라 탭 비활성화: 카메라 및 분석 중지")
+                // 🔥 Gallery Crash 방지: 다른 탭(특히 갤러리/포토피커) 진입 시 즉시 자원 해제
+                cameraManager.pauseSession(immediate: true)
+                realtimeAnalyzer.pauseAnalysis()
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -995,43 +969,10 @@ struct ContentView: View {
     // MARK: - Analysis Control
 
     /// 실시간 프레임 분석 시작 (클라이언트 사이드) - 적응형 속도
-    private func startRealtimeAnalysis() {
-        // 기존 타이머 중지
-        stopRealtimeAnalysis()
-
-        // 🔥 적응형 분석: 발열/배터리 상태에 따라 자동 조절
-        // - 정상: 60fps (0.016초)
-        // - 약간 따뜻: 45fps (0.022초)
-        // - 뜨거움: 30fps (0.033초)
-        // - 매우 뜨거움: 15fps (0.066초)
-        var frameCount = 0
-        frameUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.001, repeats: true) { _ in
-            // 발열 관리자가 분석을 허용하는지 체크
-            if self.thermalManager.shouldPerformAnalysis(),
-               let currentFrame = self.cameraManager.currentFrame {
-                frameCount += 1
-                if frameCount % 100 == 0 {
-                    print("🎬 프레임 분석 중... (\(frameCount)번째)")
-                }
-                // 🆕 줌 배율 업데이트 (35mm 환산 초점거리용)
-                self.realtimeAnalyzer.currentZoomFactor = self.cameraManager.virtualZoom
-
-                self.realtimeAnalyzer.analyzeFrame(
-                    currentFrame,
-                    isFrontCamera: self.cameraManager.isFrontCamera,
-                    currentAspectRatio: self.cameraManager.aspectRatio
-                )
-            }
-        }
-    }
-
-    /// 실시간 분석 중지
-    private func stopRealtimeAnalysis() {
-        frameUpdateTimer?.invalidate()
-        frameUpdateTimer = nil
-        realtimeAnalyzer.instantFeedback = []
-    }
-
+    // MARK: - Legacy Timer Removed
+    // startRealtimeAnalysis / stopRealtimeAnalysis methods removed. 
+    // Logic is now handled by Combine subscription in RealtimeAnalyzer.
+    
     /// 서버 분석 시작 (포즈 등 복잡한 분석용)
     private func startAnalysis() {
         guard referenceImage != nil else { return }
@@ -1040,11 +981,15 @@ struct ContentView: View {
         stopAnalysis()
 
         // 2초마다 서버 분석 (포즈만)
-        analysisTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        let timer = Timer(timeInterval: 2.0, repeats: true) { _ in
             Task {
                 await performAnalysis()
             }
         }
+
+        // 🔥 UI 반응성 개선: common 모드로 추가
+        RunLoop.main.add(timer, forMode: .common)
+        analysisTimer = timer
     }
 
     /// 서버 분석 중지
@@ -1091,7 +1036,7 @@ struct ContentView: View {
         ) { _ in
             print("🌙 백그라운드 진입: 카메라 및 분석 중단 (배터리 절약)")
             self.cameraManager.stopSession()
-            self.stopRealtimeAnalysis()
+            self.realtimeAnalyzer.pauseAnalysis()
         }
 
         // 포어그라운드 진입 시
@@ -1103,7 +1048,7 @@ struct ContentView: View {
             print("☀️ 포어그라운드 진입: 카메라 및 분석 재개")
             self.cameraManager.startSession()
             if self.referenceImage != nil {
-                self.startRealtimeAnalysis()
+                 self.realtimeAnalyzer.resumeAnalysis()
             }
         }
     }
@@ -1127,9 +1072,9 @@ struct ContentView: View {
             return
         }
 
-        guard referenceImage != nil,
-              cameraManager.currentFrame != nil else {
-            return
+        guard referenceImage != nil else {
+              // cameraManager.currentFrame != nil check removed as it is no longer published
+             return
         }
 
         isAnalyzing = true
@@ -1205,8 +1150,159 @@ struct AspectRatioMaskView: View {
     }
 }
 
+// MARK: - Lens Selector (자동 생성된 버튼 사용)
+struct LensSelector: View {
+    @ObservedObject var cameraManager: CameraManager
+
+    var body: some View {
+        Group {
+            // 후면 카메라일 때만 표시
+            if !cameraManager.isFrontCamera {
+                HStack(spacing: 8) {
+                    // 🔥 CameraManager가 기기 분석 후 만들어준 버튼 리스트를 그대로 사용
+                    ForEach(cameraManager.zoomButtons, id: \.self) { zoom in
+                        // 현재 줌 상태에 따라 활성화된 버튼인지 판단 (Range Logic)
+                        // 예: 1.0 ~ 2.9 -> 1x 버튼 활성화, 표시값은 1.5x 등 변경
+                        let isActive = isButtonActive(zoom)
+                        
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                cameraManager.setZoomAnimated(zoom)
+                            }
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(isActive ? Color.yellow.opacity(0.8) : Color.black.opacity(0.5))
+                                    .frame(width: 30, height: 30)
+                                
+                                // 활성화된 경우: 실시간 줌 배율 표시 (소수점 1자리)
+                                // 비활성 경우: 버튼의 기본 배율 표시 (0.5, 1, 3 등)
+                                Text(isActive ? String(format: "%.1fx", cameraManager.virtualZoom) : "\(String(format: "%g", zoom))")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(isActive ? .black : .white)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(Color.black.opacity(0.3))
+                )
+                .padding(.bottom, 16)
+            }
+        }
+    }
+    
+    // 현재 줌 배율이 어떤 버튼 범위에 속하는지 판단
+    private func isButtonActive(_ buttonZoom: CGFloat) -> Bool {
+        let currentZoom = cameraManager.virtualZoom
+        let buttons = cameraManager.zoomButtons.sorted()
+        
+        // 버튼이 하나뿐이면 그게 활성
+        if buttons.count <= 1 { return buttonZoom == buttons.first }
+        
+        // 현재 줌보다 작거나 같은 버튼 중 가장 큰 것 찾기 (Base Lens)
+        // 단, 0.5와 1.0 사이처럼 구간이 명확한 경우
+        
+        guard let index = buttons.firstIndex(of: buttonZoom) else { return false }
+        
+        // 마지막 버튼인 경우: 자기보다 크면 다 자기꺼
+        if index == buttons.count - 1 {
+            return currentZoom >= buttonZoom - 0.1
+        }
+        
+        // 중간 버튼인 경우: 자기 이상 ~ 다음 버튼 미만
+        let nextButtonZoom = buttons[index + 1]
+        return currentZoom >= buttonZoom - 0.1 && currentZoom < nextButtonZoom - 0.1
+    }
+}
+
+// MARK: - Debug Overlay (성능 최적화: 별도 View로 분리)
+struct DebugOverlay: View {
+    @ObservedObject var cameraManager: CameraManager
+    @ObservedObject var thermalManager: ThermalStateManager
+    @ObservedObject var realtimeAnalyzer: RealtimeAnalyzer
+    let referenceImage: UIImage?
+    let thermalStateEmoji: (ProcessInfo.ThermalState) -> String
+    let thermalColor: (ProcessInfo.ThermalState) -> Color
+
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    // FPS
+                    Text(String(format: "%.1f FPS", cameraManager.currentFPS))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(6)
+
+                    // 🔥 발열 상태
+                    let thermalEmoji = thermalStateEmoji(thermalManager.currentThermalState)
+                    let targetFPS = Int(1.0 / thermalManager.recommendedAnalysisInterval)
+                    Text("\(thermalEmoji) 목표: \(targetFPS)fps")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(thermalColor(thermalManager.currentThermalState))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(6)
+
+                    // 🔋 배터리/저전력 모드
+                    if thermalManager.isLowPowerMode {
+                        Text("⚡️ 저전력")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.yellow)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(6)
+                    }
+
+                    // 레퍼런스 포즈 키포인트
+                    if let refPose = realtimeAnalyzer.referenceAnalysis?.poseKeypoints {
+                        let visibleCount = refPose.filter { $0.confidence >= 0.5 }.count
+                        let color: Color = visibleCount >= 10 ? .green : (visibleCount >= 5 ? .yellow : .red)
+                        Text("레퍼런스: \(visibleCount)/\(refPose.count)개")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(color)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(6)
+                    }
+
+                    // 완성도
+                    if referenceImage != nil {
+                        let score = Int(realtimeAnalyzer.perfectScore * 100)
+                        Text("완성도: \(score)%")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(6)
+                    }
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 200)  // 하단 버튼 위에 표시
+            }
+        }
+    }
+}
+
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView(referenceImage: .constant(nil), referenceImageData: .constant(nil))
+        ContentView(
+            referenceImage: .constant(nil),
+            referenceImageData: .constant(nil),
+            isActiveTab: true
+        )
     }
 }

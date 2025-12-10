@@ -81,7 +81,7 @@ struct ReferenceGalleryViewSimple: View {
                     Color.white
                         .frame(height: safeAreaTop + 40)
 
-                    // 뒤로가기 버튼
+                    // 뒤로가기 버튼 & 로고
                     HStack {
                         Button(action: {
                             selectedTab = 1  // 카메라 탭으로 이동
@@ -96,6 +96,18 @@ struct ReferenceGalleryViewSimple: View {
                         .padding(.leading, 10)
 
                         Spacer()
+                        
+                        Image("Logo")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(height: 20)
+                            .foregroundColor(.black) // 흰 배경에는 검은색 로고
+                        
+                        Spacer()
+                        
+                        // 밸런스용 투명 뷰
+                        Color.clear.frame(width: 29 + 10, height: 29)
                     }
 
                     // 카테고리 탭
@@ -118,9 +130,9 @@ struct ReferenceGalleryViewSimple: View {
                             .padding(.horizontal, 10)
                         }
                         .frame(height: 37)
-                        .onChange(of: selectedCategoryIndex) { newIndex in
+                        .onChange(of: selectedCategoryIndex) { oldValue, newValue in
                             withAnimation {
-                                scrollProxy.scrollTo(newIndex, anchor: .center)
+                                scrollProxy.scrollTo(newValue, anchor: .center)
                             }
                         }
                     }
@@ -214,10 +226,10 @@ struct ReferenceGalleryViewSimple: View {
             }
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
-        .onChange(of: selectedPhotoItem) { newItem in
+        .onChange(of: selectedPhotoItem) { oldValue, newValue in
             Task {
-                if let newItem = newItem {
-                    await loadAndSavePhoto(from: newItem)
+                if let newValue = newValue {
+                    await loadAndSavePhoto(from: newValue)
                 }
             }
         }
@@ -353,63 +365,71 @@ struct SimplePhotoCard: View {
     }
 
     private func loadImageFromBundle() {
-        // 🆕 번들에서 원본 데이터 로드 시도 (EXIF 포함)
-        func loadDataAndImage(from path: String) -> Bool {
-            if let data = FileManager.default.contents(atPath: path),
-               let image = UIImage(data: data) {
-                loadedData = data
-                loadedImage = image
-                return true
-            }
-            return false
-        }
-        // 다양한 방법으로 이미지 로드 시도 (🆕 데이터 우선 로드로 EXIF 보존)
-
-        // 1. Bundle.main.path로 데이터 로드 시도 (EXIF 보존!)
-        for ext in ["jpg", "JPG", "jpeg", "JPEG", "png", "PNG"] {
-            if let path = Bundle.main.path(forResource: imageName, ofType: ext) {
-                if loadDataAndImage(from: path) {
-                    return
+        // 🔥 UI 블로킹 방지: 백그라운드에서 이미지 로드
+        DispatchQueue.global(qos: .userInitiated).async {
+            // 🆕 번들에서 원본 데이터 로드 시도 (EXIF 포함)
+            func loadDataAndImage(from path: String) -> Bool {
+                if let data = FileManager.default.contents(atPath: path),
+                   let image = UIImage(data: data) {
+                    DispatchQueue.main.async {
+                        self.loadedData = data
+                        self.loadedImage = image
+                    }
+                    return true
                 }
+                return false
             }
-        }
 
-        // 2. 전체 이름으로 시도 (IMG_9593.JPG 형식)
-        let variations = [
-            imageName,
-            imageName.replacingOccurrences(of: "IMG", with: "IMG_"),
-            "IMG_\(imageName.replacingOccurrences(of: "IMG", with: ""))"
-        ]
-
-        for name in variations {
-            for ext in ["jpg", "JPG", "jpeg", "JPEG", "png", "PNG", ""] {
-                let fullName = ext.isEmpty ? name : name
-                let extToUse = ext.isEmpty ? nil : ext
-                if let path = Bundle.main.path(forResource: fullName, ofType: extToUse) {
+            // 1. Bundle.main.path로 데이터 로드 시도 (EXIF 보존!)
+            for ext in ["jpg", "JPG", "jpeg", "JPEG", "png", "PNG"] {
+                if let path = Bundle.main.path(forResource: imageName, ofType: ext) {
                     if loadDataAndImage(from: path) {
                         return
                     }
                 }
             }
-        }
 
-        // 3. Fallback: UIImage(named:) - EXIF 없음
-        if let image = UIImage(named: imageName) {
-            loadedImage = image
-            loadedData = nil  // EXIF 없음
-            return
-        }
+            // 2. 전체 이름으로 시도 (IMG_9593.JPG 형식)
+            let variations = [
+                imageName,
+                imageName.replacingOccurrences(of: "IMG", with: "IMG_"),
+                "IMG_\(imageName.replacingOccurrences(of: "IMG", with: ""))"
+            ]
 
-        // 4. 확장자 추가해서 시도
-        for ext in [".jpg", ".JPG", ".jpeg", ".JPEG", ".png", ".PNG"] {
-            if let image = UIImage(named: imageName + ext) {
-                loadedImage = image
-                loadedData = nil  // EXIF 없음
+            for name in variations {
+                for ext in ["jpg", "JPG", "jpeg", "JPEG", "png", "PNG", ""] {
+                    let fullName = ext.isEmpty ? name : name
+                    let extToUse = ext.isEmpty ? nil : ext
+                    if let path = Bundle.main.path(forResource: fullName, ofType: extToUse) {
+                        if loadDataAndImage(from: path) {
+                            return
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback: UIImage(named:) - EXIF 없음
+            if let image = UIImage(named: imageName) {
+                DispatchQueue.main.async {
+                    self.loadedImage = image
+                    self.loadedData = nil  // EXIF 없음
+                }
                 return
             }
-        }
 
-        print("❌ 이미지 로드 실패: \(imageName)")
+            // 4. 확장자 추가해서 시도
+            for ext in [".jpg", ".JPG", ".jpeg", ".JPEG", ".png", ".PNG"] {
+                if let image = UIImage(named: imageName + ext) {
+                    DispatchQueue.main.async {
+                        self.loadedImage = image
+                        self.loadedData = nil  // EXIF 없음
+                    }
+                    return
+                }
+            }
+
+            print("❌ 이미지 로드 실패: \(imageName)")
+        }
     }
 }
 
@@ -515,13 +535,17 @@ struct UploadedPhotoCard: View {
     }
 
     private func loadImage() {
-        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            let fileURL = documentsURL.appendingPathComponent(photo.fileName)
-            // 🆕 데이터로 직접 로드하여 EXIF 보존
-            if let data = try? Data(contentsOf: fileURL),
-               let image = UIImage(data: data) {
-                loadedData = data
-                loadedImage = image
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let fileURL = documentsURL.appendingPathComponent(photo.fileName)
+                // 🆕 데이터로 직접 로드하여 EXIF 보존
+                if let data = try? Data(contentsOf: fileURL),
+                   let image = UIImage(data: data) {
+                    DispatchQueue.main.async {
+                        self.loadedData = data
+                        self.loadedImage = image
+                    }
+                }
             }
         }
     }

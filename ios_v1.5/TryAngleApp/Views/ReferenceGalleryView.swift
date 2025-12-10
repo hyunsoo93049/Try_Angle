@@ -124,10 +124,10 @@ struct ReferenceGalleryView: View {
                             .padding(.horizontal, 10)
                         }
                         .frame(height: 37)
-                        .onChange(of: selectedCategoryIndex) { newIndex in
+                        .onChange(of: selectedCategoryIndex) { oldValue, newValue in
                             // 페이지 스와이프 시 카테고리도 자동 스크롤
                             withAnimation {
-                                scrollProxy.scrollTo(newIndex, anchor: .center)
+                                scrollProxy.scrollTo(newValue, anchor: .center)
                             }
                         }
                     }
@@ -207,10 +207,10 @@ struct ReferenceGalleryView: View {
             }
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
-        .onChange(of: selectedPhotoItem) { newItem in
+        .onChange(of: selectedPhotoItem) { oldValue, newValue in
             Task {
-                if let newItem = newItem {
-                    await loadAndSavePhoto(from: newItem)
+                if let newValue = newValue {
+                    await loadAndSavePhoto(from: newValue)
                 }
             }
         }

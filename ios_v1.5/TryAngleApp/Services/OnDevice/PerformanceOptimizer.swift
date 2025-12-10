@@ -384,7 +384,7 @@ class AdaptiveFrameSkipper {
 class AsyncPipeline {
 
     typealias Level1Result = (face: FaceAnalysisResult?, pose: PoseAnalysisResult?)
-    typealias Level2Result = DepthResult?
+    typealias Level2Result = V15DepthResult?  // 🔥 Depth Anything ML 기반
     typealias Level3Result = CGRect?
 
     private let optimizer = PerformanceOptimizer.shared

@@ -103,5 +103,12 @@ This document provides a comprehensive guide for porting the iOS `TryAngle` appl
 *   **Resource Contention**: Like iOS, ensure Camera is unbound before opening the Android Gallery (`Intent.ACTION_VIEW` or `PhotoPicker`).
 *   **0.5x Zoom**: On some Android devices, the Ultra Wide camera is not exposed to 3rd party apps via CameraX. Check device compatibility.
 
+## 7. CRITICAL: Missing ML Models
+The following ML Model files are **too large for GitHub** (>100MB) and are currently **IGNORED** by git. You must transfer them manually to the Android developer (e.g., via Google Drive, USB, or Git LFS):
+1.  `Models/ONNX/rtmpose_int8.onnx` (228MB)
+2.  `Models/ONNX/yolox_int8.onnx` (101MB)
+
+*Without these files, the Gate System will not function.*
+
 ---
 *Created by Antigravity Assistant for Android Developer Handover.*

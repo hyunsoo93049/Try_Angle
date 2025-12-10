@@ -15,7 +15,7 @@ import Foundation
 import CoreGraphics
 
 // MARK: - Gate 평가 결과
-struct GateEvaluation {
+struct GateEvaluation: Equatable {
     let gate0: GateResult  // 비율
     let gate1: GateResult  // 프레이밍 (샷타입 + 점유율)
     let gate2: GateResult  // 위치/구도 (여백 + 3분할)
@@ -63,7 +63,7 @@ struct GateEvaluation {
 }
 
 // MARK: - 개별 Gate 결과
-struct GateResult {
+struct GateResult: Equatable {
     let name: String
     let score: CGFloat      // 0.0 ~ 1.0
     let threshold: CGFloat  // 통과 기준
@@ -360,7 +360,7 @@ class GateSystem {
         let isAtBottomEdge = bbox.maxY > (1.0 - edgeThreshold)
         let isAtLeftEdge = bbox.minX < edgeThreshold
         let isAtRightEdge = bbox.maxX > (1.0 - edgeThreshold)
-        let isAtEdge = isAtTopEdge || isAtBottomEdge || isAtLeftEdge || isAtRightEdge
+        let _ = isAtTopEdge || isAtBottomEdge || isAtLeftEdge || isAtRightEdge
 
         // 신체가 가장자리 여러 곳에 닿아있으면 "너무 가까움" 판단
         let edgeCount = [isAtTopEdge, isAtBottomEdge, isAtLeftEdge, isAtRightEdge].filter { $0 }.count
@@ -859,17 +859,15 @@ class GateSystem {
         // 🔧 v8: 레퍼런스 초점거리가 없으면 기본값 50mm 사용 (스마트폰 표준)
         // ⚠️ EXIF가 없어도 상대 비교 가능하도록!
         let refMM: Int
-        let refLens: LensType
         let isEstimated: Bool
 
         if let ref = reference {
             refMM = ref.focalLength35mm
-            refLens = ref.lensType
+            let _ = ref.lensType  // lensType은 로깅용으로만 사용
             isEstimated = ref.source == .fallback || ref.confidence < 0.5
         } else {
             // 🆕 레퍼런스 EXIF 없음 → 50mm (표준 렌즈) 가정
             refMM = 50
-            refLens = .normal
             isEstimated = true
             print("📐 [압축감] 레퍼런스 EXIF 없음 → 기본값 50mm 사용")
         }

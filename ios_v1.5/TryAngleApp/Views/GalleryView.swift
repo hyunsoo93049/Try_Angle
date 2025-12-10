@@ -3,6 +3,7 @@ import Photos
 import PhotosUI
 
 struct GalleryView: View {
+    @Binding var selectedTab: Int
     @State private var showPhotoPicker = false
 
     var body: some View {
@@ -10,10 +11,29 @@ struct GalleryView: View {
             Color.black.ignoresSafeArea()
 
             VStack {
-                Text("갤러리")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.top, 50)
+                // 상단 헤더 (로고 + 닫기 버튼)
+                ZStack {
+                    Image("Logo")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(height: 24)
+                        .foregroundColor(.white)
+                    
+                    HStack {
+                        Button(action: {
+                            // 카메라 탭(1)으로 복귀
+                            selectedTab = 1
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding()
+                        }
+                        Spacer()
+                    }
+                }
+                .padding(.top, 50)
 
                 Spacer()
 
@@ -98,6 +118,6 @@ struct GalleryPhotoItem: View {
 
 struct GalleryView_Previews: PreviewProvider {
     static var previews: some View {
-        GalleryView()
+        GalleryView(selectedTab: .constant(0))
     }
 }

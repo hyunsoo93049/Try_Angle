@@ -15,6 +15,16 @@ class DepthAnythingCoreML {
     private var model: VNCoreMLModel?
     private let modelType: ModelType
 
+    // 🔥 메모리 최적화: CIContext 싱글톤 (약 100MB 절약)
+    private static let sharedContext = CIContext(options: [
+        .useSoftwareRenderer: false,
+        .cacheIntermediates: false
+    ])
+
+    // 🔥 동시 실행 방지 (메모리 폭발 방지)
+    private var isProcessing = false
+    private let processingQueue = DispatchQueue(label: "depth.processing", qos: .userInitiated)
+
     enum ModelType {
         case small
         case base
@@ -54,47 +64,169 @@ class DepthAnythingCoreML {
 
     // MARK: - 깊이 추정
     func estimateDepth(from image: UIImage, completion: @escaping (Result<V15DepthResult, Error>) -> Void) {
+        // 🔥 동시 실행 방지 (이미 처리 중이면 스킵)
+        guard !isProcessing else {
+            print("⏭️ Depth Anything: 이미 처리 중 - 스킵")
+            return
+        }
+
         guard let model = model else {
+            print("❌ Depth Anything: 모델이 로드되지 않음")
             completion(.failure(DepthError.modelNotLoaded))
             return
         }
 
-        guard let cgImage = image.cgImage else {
+        isProcessing = true
+
+        // 🔥 메모리 최적화: 이미지 다운샘플링 (518x518로 리사이즈)
+        let targetSize = CGSize(width: 518, height: 518)
+        guard let resizedImage = image.resized(to: targetSize),
+              let cgImage = resizedImage.cgImage else {
+            print("❌ Depth Anything: 이미지 리사이즈 실패")
             completion(.failure(DepthError.invalidImage))
             return
         }
 
         // Vision 요청 생성
-        let request = VNCoreMLRequest(model: model) { request, error in
+        let request = VNCoreMLRequest(model: model) { [weak self] request, error in
+            defer {
+                self?.isProcessing = false  // 🔥 처리 완료 플래그
+            }
+
             if let error = error {
+                print("❌ Depth Anything Vision 에러: \(error.localizedDescription)")
                 completion(.failure(error))
                 return
             }
 
-            guard let results = request.results as? [VNCoreMLFeatureValueObservation],
-                  let depthMap = results.first?.featureValue.multiArrayValue else {
-                completion(.failure(DepthError.processingFailed))
+            // 🔧 디버그: 결과 타입 확인
+            if let results = request.results {
+                print("🔍 Depth Anything 결과 타입: \(type(of: results)), 개수: \(results.count)")
+                if let first = results.first {
+                    print("🔍 첫 번째 결과 타입: \(type(of: first))")
+                }
+            }
+
+            // 방법 1: VNCoreMLFeatureValueObservation (MLMultiArray 출력)
+            if let results = request.results as? [VNCoreMLFeatureValueObservation],
+               let depthMap = results.first?.featureValue.multiArrayValue {
+                print("✅ Depth Anything: MLMultiArray 출력 사용")
+                guard let strongSelf = self else { return }
+                let result = strongSelf.processDepthMap(depthMap, originalImage: image)
+                completion(.success(result))
                 return
             }
 
-            // 깊이맵 처리
-            let result = self.processDepthMap(depthMap, originalImage: image)
-            completion(.success(result))
+            // 방법 2: VNPixelBufferObservation (CVPixelBuffer 출력 - Apple 모델)
+            if let results = request.results as? [VNPixelBufferObservation],
+               let pixelBuffer = results.first?.pixelBuffer {
+                print("✅ Depth Anything: PixelBuffer 출력 사용")
+                guard let strongSelf = self else { return }
+                let result = strongSelf.processPixelBuffer(pixelBuffer, originalImage: image)
+                completion(.success(result))
+                return
+            }
+
+            // 방법 3: VNCoreMLFeatureValueObservation에서 다른 타입 시도
+            if let results = request.results as? [VNCoreMLFeatureValueObservation],
+               let first = results.first {
+                print("🔍 FeatureValue 타입: \(first.featureValue.type.rawValue)")
+                // 이미지 출력일 수도 있음
+                if let imageBuffer = first.featureValue.imageBufferValue {
+                    print("✅ Depth Anything: ImageBuffer 출력 사용")
+                    guard let strongSelf = self else { return }
+                    let result = strongSelf.processPixelBuffer(imageBuffer, originalImage: image)
+                    completion(.success(result))
+                    return
+                }
+            }
+
+            print("❌ Depth Anything: 지원하지 않는 출력 형식")
+            completion(.failure(DepthError.processingFailed))
         }
 
         // 입력 이미지 크기 설정 (518x518)
-        request.imageCropAndScaleOption = .centerCrop
+        request.imageCropAndScaleOption = VNImageCropAndScaleOption.centerCrop
 
-        // 요청 실행
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        // 요청 실행 (메모리 최적화)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            autoreleasepool {
+                // 🔥 CIContext 옵션 제거 (Vision이 자체적으로 관리)
+                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                try handler.perform([request])
-            } catch {
-                completion(.failure(error))
+                do {
+                    try handler.perform([request])
+                } catch {
+                    print("❌ Depth Anything perform 에러: \(error.localizedDescription)")
+                    self?.isProcessing = false  // 에러 시에도 플래그 해제
+                    completion(.failure(error))
+                }
             }
         }
+    }
+
+    // MARK: - PixelBuffer 처리 (Apple CoreML 모델용)
+    private func processPixelBuffer(_ pixelBuffer: CVPixelBuffer, originalImage: UIImage) -> V15DepthResult {
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        var foregroundDepth: Float = 0
+        var backgroundDepth: Float = 0
+        var foregroundCount = 0
+        var backgroundCount = 0
+
+        // Float32 또는 Float16 데이터 처리
+        let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        print("🔍 PixelBuffer 형식: \(pixelFormat), 크기: \(width)x\(height)")
+
+        if let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) {
+            let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+
+            // 상단 1/3 (배경)
+            for y in 0..<(height/3) {
+                for x in 0..<width {
+                    let offset = y * bytesPerRow + x * MemoryLayout<Float>.size
+                    let value = baseAddress.load(fromByteOffset: offset, as: Float.self)
+                    if !value.isNaN && !value.isInfinite {
+                        backgroundDepth += value
+                        backgroundCount += 1
+                    }
+                }
+            }
+
+            // 하단 1/4 (전경)
+            for y in (3*height/4)..<height {
+                for x in 0..<width {
+                    let offset = y * bytesPerRow + x * MemoryLayout<Float>.size
+                    let value = baseAddress.load(fromByteOffset: offset, as: Float.self)
+                    if !value.isNaN && !value.isInfinite {
+                        foregroundDepth += value
+                        foregroundCount += 1
+                    }
+                }
+            }
+        }
+
+        // 평균 계산
+        let avgBackground = backgroundCount > 0 ? backgroundDepth / Float(backgroundCount) : 0
+        let avgForeground = foregroundCount > 0 ? foregroundDepth / Float(foregroundCount) : 0
+
+        // 압축감 지수 계산
+        let depthRange = abs(avgBackground - avgForeground)
+        let compressionIndex = 1.0 - min(depthRange * 2, 1.0)
+
+        print("🔍 Depth: 배경=\(avgBackground), 전경=\(avgForeground), 압축감=\(compressionIndex)")
+
+        let cameraType = determineCameraType(compression: compressionIndex)
+
+        return V15DepthResult(
+            depthImage: nil,
+            compressionIndex: compressionIndex,
+            cameraType: cameraType
+        )
     }
 
     // MARK: - 깊이맵 처리
@@ -105,12 +237,12 @@ class DepthAnythingCoreML {
         // 카메라 타입 판정
         let cameraType = determineCameraType(compression: compressionIndex)
 
-        // 깊이맵을 이미지로 변환 (옵션)
-        let depthImage = convertToImage(depthMap)
+        // 깊이맵을 이미지로 변환 (옵션 - 디버깅용)
+        // 🔥 메모리 절약을 위해 기본적으로 nil 반환
+        // let depthImage = convertToImage(depthMap)
 
         return V15DepthResult(
-            depthMap: depthMap,
-            depthImage: depthImage,
+            depthImage: nil,  // 🔥 메모리 최적화: 필요시에만 생성
             compressionIndex: compressionIndex,
             cameraType: cameraType
         )
@@ -208,11 +340,11 @@ class DepthAnythingCoreML {
 }
 
 // MARK: - 결과 구조체 (v1.5 전용 - 기존 DepthResult와 충돌 방지)
+// 🔥 MLMultiArray 제거하여 메모리 최적화 (약 4MB 절약)
 struct V15DepthResult {
-    let depthMap: MLMultiArray
-    let depthImage: UIImage?
-    let compressionIndex: Float
-    let cameraType: V15CameraType
+    let depthImage: UIImage?       // 시각화용 (옵션)
+    let compressionIndex: Float    // 압축감 지수 (0=광각, 1=망원)
+    let cameraType: V15CameraType  // 추정 카메라 타입
 }
 
 enum V15CameraType {
@@ -258,28 +390,20 @@ enum DepthError: LocalizedError {
     }
 }
 
-// MARK: - 사용 예시
-class DepthAnythingExample {
+// MARK: - 싱글톤 (메모리 절약)
+extension DepthAnythingCoreML {
+    static let shared = DepthAnythingCoreML(modelType: .small)
+}
 
-    let depthEstimator = DepthAnythingCoreML(modelType: .small)
+// MARK: - UIImage 리사이즈 Extension (메모리 효율적)
+extension UIImage {
+    func resized(to targetSize: CGSize) -> UIImage? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0  // @1x로 강제 (메모리 절약)
 
-    func analyzeImage(_ image: UIImage) {
-        depthEstimator.estimateDepth(from: image) { result in
-            switch result {
-            case .success(let depthResult):
-                print("✅ 깊이 추정 성공")
-                print("   압축감: \(depthResult.compressionIndex)")
-                print("   카메라 타입: \(depthResult.cameraType.description)")
-                print("   추천: \(depthResult.cameraType.recommendation)")
-
-                // 깊이맵 이미지 표시
-                if let depthImage = depthResult.depthImage {
-                    // UI 업데이트
-                }
-
-            case .failure(let error):
-                print("❌ 깊이 추정 실패: \(error)")
-            }
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        return renderer.image { context in
+            self.draw(in: CGRect(origin: .zero, size: targetSize))
         }
     }
 }

@@ -10,7 +10,7 @@ struct FaceAnalysisResult {
     let yaw: Float?                             // 좌우 회전
     let pitch: Float?                           // 상하 각도
     let roll: Float?                            // 기울기
-    let observation: VNFaceObservation          // 원본 관찰 결과
+    let observation: VNFaceObservation?         // 원본 관찰 결과 (Vision 사용 시에만)
 }
 
 // MARK: - 포즈 분석 결과
@@ -70,7 +70,7 @@ class VisionAnalyzer {
             yaw: observation.yaw?.floatValue,
             pitch: observation.pitch?.floatValue,
             roll: observation.roll?.floatValue,
-            observation: observation
+            observation: observation  // Vision에서는 전달
         )
     }
 

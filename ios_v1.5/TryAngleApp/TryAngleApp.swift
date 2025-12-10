@@ -15,9 +15,17 @@ struct TryAngleApp: App {
         }
     }
 
+    @State private var showSplash = true
+
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            if showSplash {
+                SplashView(isActive: $showSplash)
+            } else {
+                MainTabView()
+            }
         }
     }
 }
+
+

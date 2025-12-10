@@ -41,14 +41,15 @@ class TryAngleOnDeviceAnalyzer {
             fatalError("❌ RTMPose 초기화 실패")
         }
 
-        // Depth Anything (CoreML)
-        self.depthEstimator = DepthAnythingCoreML(modelType: .small)
-        print("✅ Depth Anything CoreML 로드 완료")
+        // Depth Anything (CoreML) - 🔥 싱글톤 사용 (메모리 최적화)
+        self.depthEstimator = DepthAnythingCoreML.shared
+        print("✅ Depth Anything CoreML 싱글톤 연결 완료")
 
         // Person Detector (선택적 - 레거시 시스템)
+        // 🔥 YOLOX 재사용: RTMPoseRunner 전달
         if enableLegacySystem {
-            self.personDetector = PersonDetector()
-            print("✅ Person Detector 로드 완료 (레거시 모드)")
+            self.personDetector = PersonDetector(rtmPoseRunner: self.rtmposeRunner)
+            print("✅ Person Detector 로드 완료 (YOLOX 재사용 모드)")
         } else {
             self.personDetector = nil
             print("ℹ️ 레거시 시스템 비활성화 (RTMPose만 사용)")

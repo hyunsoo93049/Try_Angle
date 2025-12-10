@@ -1,14 +1,14 @@
 import Foundation
 import CoreGraphics
 
-// MARK: - 피드백 생성기
+// MARK: - 피드백 생성기 (🗑️ 레거시 - Gate System으로 대체됨)
 class FeedbackGenerator {
 
     // 헬퍼 컴포넌트
     private let cameraAngleDetector = CameraAngleDetector()
     private let compositionAnalyzer = CompositionAnalyzer()
     private let gazeTracker = GazeTracker()
-    private let depthEstimator = DepthEstimator()
+    // 🔥 DepthEstimator 제거 - Depth Anything으로 대체됨
     private let poseComparator = AdaptivePoseComparator()
 
     /// Gap 목록을 FeedbackItem으로 변환
@@ -30,7 +30,7 @@ class FeedbackGenerator {
             cameraAngle: CameraAngle,
             compositionType: CompositionType?,
             gaze: GazeResult?,
-            depth: DepthResult?
+            depth: V15DepthResult?  // 🔥 Depth Anything 기반
         ),
         isFrontCamera: Bool = false
     ) -> [FeedbackItem] {
@@ -124,7 +124,7 @@ class FeedbackGenerator {
             cameraAngle: CameraAngle,
             compositionType: CompositionType?,
             gaze: GazeResult?,
-            depth: DepthResult?
+            depth: V15DepthResult?  // 🔥 Depth Anything 기반
         ),
         isFrontCamera: Bool
     ) -> FeedbackItem? {
@@ -165,7 +165,7 @@ class FeedbackGenerator {
         }
     }
 
-    /// 거리 피드백 생성
+    /// 거리 피드백 생성 (🔥 Depth Anything 압축감 기반)
     private func generateDistanceFeedback(
         gap: Gap,
         reference: FrameAnalysis,
@@ -178,7 +178,7 @@ class FeedbackGenerator {
             cameraAngle: CameraAngle,
             compositionType: CompositionType?,
             gaze: GazeResult?,
-            depth: DepthResult?
+            depth: V15DepthResult?  // 🔥 Depth Anything 기반
         )
     ) -> FeedbackItem? {
 
@@ -186,23 +186,38 @@ class FeedbackGenerator {
             return nil
         }
 
-        if let (message, shouldUseZoom) = depthEstimator.generateDistanceFeedback(
-            reference: refDepth,
-            current: curDepth
-        ) {
-            return FeedbackItem(
-                priority: gap.priority,
-                icon: shouldUseZoom ? "🔍" : "🚶",
-                message: message,
-                category: "distance",
-                currentValue: gap.current,
-                targetValue: gap.target,
-                tolerance: gap.tolerance,
-                unit: "m"
-            )
+        // 🔥 Depth Anything의 compressionIndex로 피드백 생성
+        let refCompression = refDepth.compressionIndex
+        let curCompression = curDepth.compressionIndex
+        let diff = curCompression - refCompression
+
+        if abs(diff) < 0.1 {
+            return nil  // 차이가 작으면 피드백 없음
         }
 
-        return nil
+        let message: String
+        let shouldUseZoom: Bool
+
+        if diff > 0 {
+            // 현재 압축감이 더 높음 → 망원 효과가 강함 → 뒤로 가거나 줌아웃
+            message = "배경이 너무 압축되어요. 줌아웃하거나 뒤로 가세요"
+            shouldUseZoom = true
+        } else {
+            // 현재 압축감이 더 낮음 → 광각 효과가 강함 → 앞으로 가거나 줌인
+            message = "배경 압축이 부족해요. 줌인하거나 가까이 가세요"
+            shouldUseZoom = true
+        }
+
+        return FeedbackItem(
+            priority: gap.priority,
+            icon: shouldUseZoom ? "🔍" : "🚶",
+            message: message,
+            category: "distance",
+            currentValue: gap.current,
+            targetValue: gap.target,
+            tolerance: gap.tolerance,
+            unit: nil
+        )
     }
 
     /// X 위치 피드백
@@ -312,7 +327,7 @@ class FeedbackGenerator {
             cameraAngle: CameraAngle,
             compositionType: CompositionType?,
             gaze: GazeResult?,
-            depth: DepthResult?
+            depth: V15DepthResult?  // 🔥 Depth Anything 기반
         )
     ) -> FeedbackItem {
         guard let current = gap.current, let target = gap.target else {
@@ -476,7 +491,7 @@ class FeedbackGenerator {
             cameraAngle: CameraAngle,
             compositionType: CompositionType?,
             gaze: GazeResult?,
-            depth: DepthResult?
+            depth: V15DepthResult?  // 🔥 Depth Anything 기반
         )
     ) -> FeedbackItem? {
 

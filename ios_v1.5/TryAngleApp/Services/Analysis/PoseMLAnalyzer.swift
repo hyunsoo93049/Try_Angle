@@ -1,19 +1,14 @@
 import Foundation
-import Vision
 import UIKit
+import Vision  // FaceAnalysisResult의 VNFaceObservation 타입 때문에 필요
 
 // MARK: - PoseML 분석기 (RTMPose via ONNX Runtime)
+// RTMPose 133 키포인트로 얼굴 + 포즈 동시 분석
 class PoseMLAnalyzer {
 
     // RTMPose Runner (ONNX Runtime)
-    private let rtmPoseRunner: RTMPoseRunner?
-
-    // Vision은 얼굴 감지용으로 계속 사용
-    private lazy var faceDetectionRequest: VNDetectFaceLandmarksRequest = {
-        let request = VNDetectFaceLandmarksRequest()
-        request.revision = VNDetectFaceLandmarksRequestRevision3
-        return request
-    }()
+    // 🔥 public으로 노출하여 PersonDetector에서 YOLOX 재사용 가능
+    let rtmPoseRunner: RTMPoseRunner?
 
     // 🐛 디버그 로그 파일 경로
     private lazy var logFileURL: URL? = {
@@ -76,11 +71,11 @@ class PoseMLAnalyzer {
             logToFile("🔍 analyzeFaceAndPose() 호출됨 (호출 횟수: \(analysisCallCount))")
         }
 
-        // 얼굴 감지 (Vision 계속 사용 - 가장 정확함)
-        let faceResult = detectFace(from: image)
-
         // RTMPose 포즈 감지 (ONNX Runtime)
         let poseResult = detectPoseWithRTMPose(from: image)
+
+        // 얼굴 정보 추출 (RTMPose 키포인트 기반)
+        let faceResult = extractFaceFromPose(poseResult: poseResult, imageSize: image.size)
 
         // 10번마다 상세 로그
         if analysisCallCount % 10 == 1 {
@@ -90,29 +85,76 @@ class PoseMLAnalyzer {
         return (faceResult, poseResult)
     }
 
-    // MARK: - 얼굴 감지 (Vision)
-    private func detectFace(from image: UIImage) -> FaceAnalysisResult? {
-        guard let cgImage = image.cgImage else { return nil }
-
-        let handler = VNImageRequestHandler(
-            cgImage: cgImage,
-            orientation: image.cgImageOrientation,
-            options: [:]
-        )
-        try? handler.perform([faceDetectionRequest])
-
-        guard let observation = faceDetectionRequest.results?.first else {
+    // MARK: - RTMPose 키포인트에서 얼굴 정보 추출
+    private func extractFaceFromPose(poseResult: PoseAnalysisResult?, imageSize: CGSize) -> FaceAnalysisResult? {
+        guard let pose = poseResult, pose.keypoints.count >= 23 else {
             return nil
         }
 
-        return FaceAnalysisResult(
-            faceRect: observation.boundingBox,
-            landmarks: observation.landmarks,
-            yaw: observation.yaw?.floatValue,
-            pitch: observation.pitch?.floatValue,
-            roll: observation.roll?.floatValue,
-            observation: observation
+        // RTMPose 얼굴 키포인트 (23~90번): 68개
+        let faceKeypoints = Array(pose.keypoints[23..<min(91, pose.keypoints.count)])
+
+        // 신뢰도 있는 얼굴 키포인트 필터링
+        let validFacePoints = faceKeypoints.filter { $0.confidence > 0.3 }
+        guard validFacePoints.count >= 5 else {
+            return nil  // 최소 5개 이상의 키포인트 필요
+        }
+
+        // 얼굴 바운딩 박스 계산
+        let facePoints = validFacePoints.map { $0.point }
+        let minX = facePoints.map { $0.x }.min() ?? 0
+        let maxX = facePoints.map { $0.x }.max() ?? 0
+        let minY = facePoints.map { $0.y }.min() ?? 0
+        let maxY = facePoints.map { $0.y }.max() ?? 0
+
+        // 정규화된 좌표로 변환 (0.0 ~ 1.0)
+        let faceRect = CGRect(
+            x: minX / imageSize.width,
+            y: minY / imageSize.height,
+            width: (maxX - minX) / imageSize.width,
+            height: (maxY - minY) / imageSize.height
         )
+
+        // yaw, pitch, roll 추정 (RTMPose 눈/코/입 키포인트에서)
+        let (yaw, pitch, roll) = estimateFaceAngles(from: pose.keypoints, imageSize: imageSize)
+
+        return FaceAnalysisResult(
+            faceRect: faceRect,
+            landmarks: nil,  // Vision landmarks 없음
+            yaw: yaw,
+            pitch: pitch,
+            roll: roll,
+            observation: nil  // VNFaceObservation 없음
+        )
+    }
+
+    // MARK: - 얼굴 각도 추정 (RTMPose 키포인트 기반)
+    private func estimateFaceAngles(from keypoints: [(point: CGPoint, confidence: Float)], imageSize: CGSize) -> (Float?, Float?, Float?) {
+        guard keypoints.count >= 17 else { return (nil, nil, nil) }
+
+        // 눈 키포인트 (1: left_eye, 2: right_eye)
+        let leftEye = keypoints[1]
+        let rightEye = keypoints[2]
+        let nose = keypoints[0]
+
+        guard leftEye.confidence > 0.5, rightEye.confidence > 0.5 else {
+            return (nil, nil, nil)
+        }
+
+        // Roll (좌우 기울기): 두 눈의 y 차이
+        let eyeDy = leftEye.point.y - rightEye.point.y
+        let eyeDx = leftEye.point.x - rightEye.point.x
+        let roll = atan2(eyeDy, eyeDx)  // 라디안
+
+        // Yaw (좌우 회전): 두 눈의 x 거리 비율
+        let eyeDistance = abs(leftEye.point.x - rightEye.point.x)
+        let faceWidth = imageSize.width * 0.3  // 평균 얼굴 너비
+        let yaw = (eyeDistance - faceWidth) / faceWidth * 0.5  // 정규화
+
+        // Pitch (상하 각도): 코와 눈의 y 차이
+        let pitch: Float? = nose.confidence > 0.5 ? Float((nose.point.y - leftEye.point.y) / imageSize.height) : nil
+
+        return (Float(yaw), pitch, Float(roll))
     }
 
     // MARK: - RTMPose 포즈 감지

@@ -256,8 +256,8 @@ class UnifiedFeedbackGenerator {
         // ============================================
 
         let compressionOK = evaluation.gate3.passed
-        let framingOK = evaluation.gate1.passed
-        let marginOK = evaluation.gate2.passed
+        let _ = evaluation.gate1.passed
+        let _ = evaluation.gate2.passed  // marginOK는 현재 미사용
 
         // 🔑 핵심 분기: 압축감 상태에 따라 피드백 전략 결정
         if compressionOK {

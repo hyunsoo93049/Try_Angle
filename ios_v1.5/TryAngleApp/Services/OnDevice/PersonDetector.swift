@@ -1,82 +1,68 @@
 // PersonDetector.swift
-// 사람 검출 통합 인터페이스
-// Grounding DINO (ONNX Runtime) + Vision Framework 폴백
+// 사람 검출 - YOLOX 전용 (RTMPoseRunner 재사용)
 // 작성일: 2025-12-05
-// 수정일: 2025-12-09 - 파일명 변경 (GroundingDINOCoreML → PersonDetector)
+// 수정일: 2025-12-10 - Vision Framework 제거, YOLOX 전용
 
 import CoreML
-import Vision
 import CoreImage
+import UIKit
 
 class PersonDetector {
 
-    // ONNX 모델 인스턴스
-    private var onnxModel: GroundingDINOONNX?
-    private var useONNX: Bool = false
-    private var isLoading: Bool = true
+    // RTMPoseRunner 참조 (YOLOX 재사용)
+    private weak var rtmPoseRunner: RTMPoseRunner?
 
     // MARK: - Initialization
-    init() {
-        print("🔄 Grounding DINO ONNX 모델 로딩 시작 (백그라운드)...")
+    init(rtmPoseRunner: RTMPoseRunner? = nil) {
+        self.rtmPoseRunner = rtmPoseRunner
+        print("✅ PersonDetector 초기화 (YOLOX 전용)")
+    }
 
-        // ONNX 모델 초기화 (백그라운드에서 로딩됨)
-        let onnx = GroundingDINOONNX { [weak self] success in
-            guard let self = self else { return }
-
-            self.isLoading = false
-
-            if success {
-                self.useONNX = true
-                print("✅ Grounding DINO 초기화 완료 (ONNX Runtime)")
-            } else {
-                self.useONNX = false
-                print("⚠️ ONNX 세션 로드 실패, Vision Framework 폴백 사용")
-            }
-        }
-
-        onnxModel = onnx
+    // RTMPoseRunner 연결 (나중에 설정)
+    func setRTMPoseRunner(_ runner: RTMPoseRunner) {
+        self.rtmPoseRunner = runner
+        print("✅ PersonDetector: RTMPoseRunner 연결됨 (YOLOX 사용 가능)")
     }
 
     // MARK: - Person Detection
     func detectPerson(in image: CIImage, completion: @escaping (CGRect?) -> Void) {
-        // 로딩 중이면 ONNX 모델의 isSessionLoaded를 직접 체크
-        if let onnx = onnxModel, onnx.isSessionLoaded {
-            // ONNX Runtime 사용
-            onnx.detectPerson(in: image, completion: completion)
-        } else if isLoading {
-            // 아직 로딩 중이면 Vision Framework로 일단 처리
-            detectPersonWithVision(in: image, completion: completion)
-        } else {
-            // Vision Framework 폴백
-            detectPersonWithVision(in: image, completion: completion)
+        // YOLOX 전용
+        guard let runner = rtmPoseRunner, runner.isReady else {
+            print("⚠️ PersonDetector: RTMPoseRunner not ready")
+            completion(nil)
+            return
         }
+        detectPersonWithYOLOX(in: image, using: runner, completion: completion)
     }
 
-    // MARK: - Vision Framework Fallback
-    private func detectPersonWithVision(in image: CIImage, completion: @escaping (CGRect?) -> Void) {
-        let request = VNDetectHumanRectanglesRequest { request, error in
-            if let error = error {
-                print("❌ Vision person detection 실패: \(error)")
-                completion(nil)
+    // MARK: - YOLOX Detection (RTMPoseRunner 재사용)
+    private func detectPersonWithYOLOX(in image: CIImage, using runner: RTMPoseRunner, completion: @escaping (CGRect?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            // CIImage → UIImage 변환
+            let context = CIContext()
+            guard let cgImage = context.createCGImage(image, from: image.extent) else {
+                DispatchQueue.main.async { completion(nil) }
                 return
             }
+            let uiImage = UIImage(cgImage: cgImage)
 
-            if let results = request.results as? [VNHumanObservation],
-               let firstPerson = results.first {
-                completion(firstPerson.boundingBox)
+            // YOLOX로 검출
+            let bbox = runner.detectPersonBBox(from: uiImage)
+
+            if let bbox = bbox {
+                // YOLOX BBox는 픽셀 좌표 → 정규화 좌표로 변환
+                let imageSize = image.extent.size
+                let normalizedBBox = CGRect(
+                    x: bbox.origin.x / imageSize.width,
+                    y: bbox.origin.y / imageSize.height,
+                    width: bbox.width / imageSize.width,
+                    height: bbox.height / imageSize.height
+                )
+
+                DispatchQueue.main.async {
+                    completion(normalizedBBox)
+                }
             } else {
-                completion(nil)
-            }
-        }
-
-        request.upperBodyOnly = false
-
-        let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                try handler.perform([request])
-            } catch {
-                print("❌ Vision 처리 실패: \(error)")
                 DispatchQueue.main.async {
                     completion(nil)
                 }
@@ -86,52 +72,44 @@ class PersonDetector {
 
     // MARK: - Multiple Person Detection
     func detectAllPersons(in image: CIImage, completion: @escaping ([Detection]) -> Void) {
-        // 로딩 중이면 ONNX 모델의 isSessionLoaded를 직접 체크
-        if let onnx = onnxModel, onnx.isSessionLoaded {
-            onnx.detectAllPersons(in: image, completion: completion)
-        } else {
-            detectAllPersonsWithVision(in: image, completion: completion)
+        guard let runner = rtmPoseRunner, runner.isReady else {
+            print("⚠️ PersonDetector: RTMPoseRunner not ready")
+            completion([])
+            return
         }
+        detectAllPersonsWithYOLOX(in: image, using: runner, completion: completion)
     }
 
-    private func detectAllPersonsWithVision(in image: CIImage, completion: @escaping ([Detection]) -> Void) {
-        let request = VNDetectHumanRectanglesRequest { request, error in
-            if let error = error {
-                print("❌ Vision person detection 실패: \(error)")
-                completion([])
+    private func detectAllPersonsWithYOLOX(in image: CIImage, using runner: RTMPoseRunner, completion: @escaping ([Detection]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let context = CIContext()
+            guard let cgImage = context.createCGImage(image, from: image.extent) else {
+                DispatchQueue.main.async { completion([]) }
                 return
             }
+            let uiImage = UIImage(cgImage: cgImage)
+            let imageSize = image.extent.size
 
-            if let results = request.results as? [VNHumanObservation] {
-                let detections = results.map { observation in
-                    Detection(
-                        label: "person",
-                        confidence: observation.confidence,
-                        boundingBox: observation.boundingBox
-                    )
-                }
-                completion(detections)
-            } else {
-                completion([])
+            let boxes = runner.detectAllPersonBBoxes(from: uiImage)
+
+            let detections = boxes.map { bbox -> Detection in
+                // 픽셀 좌표 → 정규화 좌표
+                let normalizedBBox = CGRect(
+                    x: bbox.origin.x / imageSize.width,
+                    y: bbox.origin.y / imageSize.height,
+                    width: bbox.width / imageSize.width,
+                    height: bbox.height / imageSize.height
+                )
+                return Detection(label: "person", confidence: 0.9, boundingBox: normalizedBBox)
             }
-        }
 
-        request.upperBodyOnly = false
-
-        let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                try handler.perform([request])
-            } catch {
-                print("❌ Vision 처리 실패: \(error)")
-                DispatchQueue.main.async {
-                    completion([])
-                }
+            DispatchQueue.main.async {
+                completion(detections)
             }
         }
     }
 
-    // MARK: - Text-Guided Detection
+    // MARK: - Text-Guided Detection (호환성 유지)
     func detectWithText(in image: CIImage, text: String, completion: @escaping ([Detection]) -> Void) {
         if text.lowercased().contains("person") || text.lowercased().contains("사람") {
             detectAllPersons(in: image, completion: completion)
@@ -142,19 +120,12 @@ class PersonDetector {
     }
 
     // MARK: - Model Info
-    var isUsingONNX: Bool {
-        // 실제 로드 상태 확인
-        return onnxModel?.isSessionLoaded ?? false
+    var isUsingYOLOX: Bool {
+        return rtmPoseRunner?.isReady ?? false
     }
 
     var modelDescription: String {
-        if isUsingONNX {
-            return "Grounding DINO (ONNX Runtime)"
-        } else if isLoading {
-            return "Grounding DINO (로딩 중...)"
-        } else {
-            return "Vision Framework (VNDetectHumanRectanglesRequest)"
-        }
+        return "YOLOX (RTMPoseRunner 재사용)"
     }
 }
 
@@ -173,7 +144,7 @@ extension PersonDetector {
         let imageWidth = imageSize.width
         let imageHeight = imageSize.height
 
-        // bbox를 픽셀 좌표로 변환 (Vision은 normalized coordinates 사용)
+        // bbox를 픽셀 좌표로 변환 (Vision/YOLOX는 normalized coordinates 사용)
         let x = personBBox.origin.x * imageWidth
         let y = personBBox.origin.y * imageHeight
         let w = personBBox.width * imageWidth

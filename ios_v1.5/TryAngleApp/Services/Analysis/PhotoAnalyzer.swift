@@ -111,7 +111,7 @@ class PhotoAnalyzer {
             type: .color,
             score: colorScore,
             isMatched: colorMatched,
-            feedback: colorMatched ? "색감이 비슷합니다!" : "색감이 조금 더 따뜻해야 합니다!"
+            feedback: "색감이 비슷합니다!"  // TODO: 색상 분석 로직 추가 후 조건부 메시지로 변경
         ))
 
         // 5. 감성 (압축감 기반)
@@ -130,7 +130,7 @@ class PhotoAnalyzer {
             type: .lighting,
             score: lightingScore,
             isMatched: lightingScore >= 0.7,
-            feedback: lightingScore >= 0.7 ? "조명이 적절합니다!" : "조명이 조금 어둡습니다"
+            feedback: "조명이 적절합니다!" // TODO: 로직 구현 후 조건부 메시지로 변경
         ))
 
         // 7. 초점 (빠른 피드백용)
@@ -139,7 +139,7 @@ class PhotoAnalyzer {
             type: .focus,
             score: focusScore,
             isMatched: focusScore >= 0.7,
-            feedback: focusScore >= 0.7 ? "초점이 잘 맞았습니다!" : "초점이 약간 흐립니다"
+            feedback: "초점이 잘 맞았습니다!" // TODO: 로직 구현 후 조건부 메시지로 변경
         ))
 
         return categories

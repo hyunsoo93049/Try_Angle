@@ -11,11 +11,15 @@ struct MainTabView: View {
             ZStack {
                 // 갤러리
                 if selectedTab == 0 {
-                    GalleryView()
+                    GalleryView(selectedTab: $selectedTab)
                 }
 
                 // 카메라 (항상 백그라운드에 유지)
-                ContentView(referenceImage: $selectedReferenceImage, referenceImageData: $selectedReferenceImageData)
+                ContentView(
+                    referenceImage: $selectedReferenceImage,
+                    referenceImageData: $selectedReferenceImageData,
+                    isActiveTab: selectedTab == 1
+                )
                     .opacity(selectedTab == 1 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 1)
 

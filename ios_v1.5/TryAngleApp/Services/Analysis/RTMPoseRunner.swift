@@ -116,6 +116,33 @@ class RTMPoseRunner {
         }
     }
 
+    // MARK: - YOLOX만 사용한 사람 검출 (BBox만 필요할 때)
+    func detectPersonBBox(from image: UIImage) -> CGRect? {
+        guard let detectorSession = detectorSession,
+              let env = env else {
+            print("❌ YOLOX 세션이 초기화되지 않음")
+            return nil
+        }
+
+        return detectPerson(from: image, using: detectorSession, env: env)
+    }
+
+    // MARK: - YOLOX로 모든 사람 검출 (멀티 person)
+    func detectAllPersonBBoxes(from image: UIImage) -> [CGRect] {
+        guard let detectorSession = detectorSession,
+              let env = env else {
+            print("❌ YOLOX 세션이 초기화되지 않음")
+            return []
+        }
+
+        return detectAllPersons(from: image, using: detectorSession, env: env)
+    }
+
+    // MARK: - 세션 상태 확인
+    var isReady: Bool {
+        return detectorSession != nil && poseSession != nil && env != nil
+    }
+
     // MARK: - 포즈 추정
     func detectPose(from image: UIImage) -> RTMPoseResult? {
         guard let detectorSession = detectorSession,
@@ -378,6 +405,79 @@ class RTMPoseRunner {
         }
 
         return bestBox
+    }
+
+    // MARK: - YOLOX 모든 사람 검출 (멀티 person)
+    private func detectAllPersons(from image: UIImage, using session: ORTSession, env: ORTEnv) -> [CGRect] {
+        guard let cgImage = image.cgImage else { return [] }
+
+        let inputSize = detectorInputSize
+        guard let resizedImage = resizeImage(cgImage, targetSize: inputSize) else { return [] }
+
+        let pixelData = preprocessImage(resizedImage, size: inputSize)
+
+        do {
+            let inputShape: [NSNumber] = [1, 3, NSNumber(value: Int(inputSize.height)), NSNumber(value: Int(inputSize.width))]
+            let inputTensor = try ORTValue(
+                tensorData: NSMutableData(data: pixelData),
+                elementType: .float,
+                shape: inputShape
+            )
+
+            let outputs = try session.run(
+                withInputs: ["input": inputTensor],
+                outputNames: ["dets", "labels"],
+                runOptions: nil
+            )
+
+            guard let detsTensor = outputs["dets"],
+                  let labelsTensor = outputs["labels"] else {
+                return []
+            }
+
+            return parseYOLOXOutputAll(detsTensor, labels: labelsTensor, imageSize: CGSize(width: cgImage.width, height: cgImage.height))
+
+        } catch {
+            print("❌ YOLOX 추론 오류: \(error)")
+            return []
+        }
+    }
+
+    // MARK: - YOLOX 출력 파싱 (모든 person)
+    private func parseYOLOXOutputAll(_ dets: ORTValue, labels: ORTValue, imageSize: CGSize) -> [CGRect] {
+        guard let detsData = try? dets.tensorData() as NSData,
+              let labelsData = try? labels.tensorData() as NSData else { return [] }
+        guard let detsShape = try? dets.tensorTypeAndShapeInfo().shape else { return [] }
+
+        let numBoxes = detsShape[1].intValue
+        if numBoxes == 0 { return [] }
+
+        var boxes: [CGRect] = []
+        let threshold: Float = 0.3
+
+        let detsPointer = detsData.bytes.bindMemory(to: Float.self, capacity: detsData.length / MemoryLayout<Float>.size)
+        let labelsPointer = labelsData.bytes.bindMemory(to: Int64.self, capacity: labelsData.length / MemoryLayout<Int64>.size)
+
+        let scaleX = imageSize.width / detectorInputSize.width
+        let scaleY = imageSize.height / detectorInputSize.height
+
+        for i in 0..<numBoxes {
+            let label = labelsPointer[i]
+            guard label == 0 else { continue }  // person class = 0
+
+            let offset = i * 5
+            let score = detsPointer[offset + 4]
+            guard score > threshold else { continue }
+
+            let x1 = CGFloat(detsPointer[offset + 0]) * scaleX
+            let y1 = CGFloat(detsPointer[offset + 1]) * scaleY
+            let x2 = CGFloat(detsPointer[offset + 2]) * scaleX
+            let y2 = CGFloat(detsPointer[offset + 3]) * scaleY
+
+            boxes.append(CGRect(x: x1, y: y1, width: x2 - x1, height: y2 - y1))
+        }
+
+        return boxes
     }
 
     private func parseRTMPoseSimCCOutput(simccX: ORTValue, simccY: ORTValue, boundingBox: CGRect) -> [(point: CGPoint, confidence: Float)]? {

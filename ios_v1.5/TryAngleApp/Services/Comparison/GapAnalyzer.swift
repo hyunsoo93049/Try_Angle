@@ -56,7 +56,7 @@ class GapAnalyzer {
             cameraAngle: CameraAngle,
             compositionType: CompositionType?,
             gaze: GazeResult?,
-            depth: DepthResult?,
+            depth: V15DepthResult?,  // 🔥 Depth Anything ML 기반
             aspectRatio: CameraAspectRatio,
             padding: ImagePadding?
         )
@@ -98,21 +98,21 @@ class GapAnalyzer {
             }
         }
 
-        // 3. 거리 Gap - 우선순위 3 (프레이밍)
+        // 3. 압축감 Gap (🔥 Depth Anything 기반) - 우선순위 3 (프레이밍)
         if let refDepth = reference.depth, let curDepth = current.depth {
-            if let refDist = refDepth.distance, let curDist = curDepth.distance {
-                let diff = abs(curDist - refDist)
-                if diff > 0.3 {  // 🔄 30cm 이상 차이 (더 관대하게)
-                    gaps.append(Gap(
-                        type: .distance,
-                        current: Double(curDist),
-                        target: Double(refDist),
-                        difference: Double(diff),
-                        tolerance: 0.3,
-                        priority: 3,  // 프레이밍 (거리/줌)
-                        metadata: ["depth_method": curDepth.method]
-                    ))
-                }
+            let refCompression = refDepth.compressionIndex
+            let curCompression = curDepth.compressionIndex
+            let diff = abs(curCompression - refCompression)
+            if diff > 0.15 {  // 🔄 15% 이상 차이
+                gaps.append(Gap(
+                    type: .distance,
+                    current: Double(curCompression),
+                    target: Double(refCompression),
+                    difference: Double(diff),
+                    tolerance: 0.15,
+                    priority: 3,  // 프레이밍 (압축감)
+                    metadata: ["camera_type": curDepth.cameraType.description]
+                ))
             }
         }
 
