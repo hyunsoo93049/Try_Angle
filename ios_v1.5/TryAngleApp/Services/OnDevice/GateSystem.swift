@@ -71,8 +71,9 @@ struct GateResult: Equatable {
     let feedback: String
     let feedbackIcon: String  // 피드백 아이콘
     let category: String      // 피드백 카테고리
+    let debugInfo: String?    // 🆕 디버그용 추가 정보 (사용자 요청)
 
-    init(name: String, score: CGFloat, threshold: CGFloat, feedback: String, icon: String = "📸", category: String = "general") {
+    init(name: String, score: CGFloat, threshold: CGFloat, feedback: String, icon: String = "📸", category: String = "general", debugInfo: String? = nil) {
         self.name = name
         self.score = score
         self.threshold = threshold
@@ -80,6 +81,11 @@ struct GateResult: Equatable {
         self.feedback = feedback
         self.feedbackIcon = icon
         self.category = category
+        self.debugInfo = debugInfo
+    }
+    
+    var debugDescription: String {
+        return "   [\(name)] \(passed ? "✅ PASS" : "❌ FAIL") (\(String(format: "%.0f%%", score * 100)))\n      - Feedback: \(feedback)\n      - Debug: \(debugInfo ?? "N/A")"
     }
 }
 
@@ -119,71 +125,72 @@ enum ShotTypeGate: Int, CaseIterable {
         return .extremeCloseUp
     }
 
-    /// 🆕 키포인트 기반 샷타입 판별 (Python framing_analyzer.py 로직 이식)
-    /// 가장 아래에 보이는 신체 부위로 샷타입 결정
-    /// ⚠️ 핵심: confidence + 프레임 내 위치(y: 0.0~1.0) 둘 다 체크해야 함!
-    static func fromKeypoints(_ keypoints: [PoseKeypoint], confidenceThreshold: Float = 0.5) -> ShotTypeGate {
+    /// 🆕 키포인트 기반 샷타입 판별 (Robust Version)
+    /// - confidenceThreshold 0.5 -> 0.3 (완화)
+    /// - Edge Heuristic: 무릎/골반이 하단에 위치하면 한 단계 더 넓은 샷으로 간주 (e.g. Low Knees -> Medium Full)
+    static func fromKeypoints(_ keypoints: [PoseKeypoint], confidenceThreshold: Float = 0.3) -> ShotTypeGate {
         guard keypoints.count >= 17 else {
-            return .mediumShot  // 키포인트 부족 시 기본값
+            return .mediumShot
         }
 
-        // RTMPose 키포인트 인덱스 (COCO 17 + extended)
-        // 0: nose, 5-6: shoulders, 7-8: elbows, 11-12: hips, 13-14: knees, 15-16: ankles
-
-        /// 해당 부위가 "프레임 내에 보이는지" 체크
-        /// - confidence > threshold
-        /// - y좌표가 0.0 ~ 1.0 범위 내 (정규화된 좌표 기준)
+        // Helper: Is Visible & Valid
         func isVisible(_ idx: Int) -> Bool {
             guard idx < keypoints.count else { return false }
             let kp = keypoints[idx]
-            // confidence 체크 + 프레임 내 위치 체크 (y: 0.0 ~ 1.0)
             return kp.confidence > confidenceThreshold &&
-                   kp.location.y >= 0.0 && kp.location.y <= 1.0 &&
-                   kp.location.x >= 0.0 && kp.location.x <= 1.0
+                   kp.location.y >= 0.0 && kp.location.y <= 1.05 // 🔧 1.05: 약간 벗어난 것도 인정
+        }
+        
+        func getMaxY(_ indices: [Int]) -> CGFloat {
+            return indices.compactMap { idx -> CGFloat? in
+                guard idx < keypoints.count, isVisible(idx) else { return nil }
+                return keypoints[idx].location.y
+            }.max() ?? 0.0
         }
 
-        // 각 부위 가시성 체크 (confidence + 프레임 내 위치)
-        let hasAnkles = isVisible(15) || isVisible(16)  // 발목
-        let hasKnees = isVisible(13) || isVisible(14)   // 무릎
-        let hasHips = isVisible(11) || isVisible(12)    // 골반
-        let hasElbows = isVisible(7) || isVisible(8)    // 팔꿈치
-        let hasShoulders = isVisible(5) || isVisible(6) // 어깨
-
-        // 발 키포인트 (RTMPose 133 기준: 17~22)
+        // Visibility Checks
+        let hasAnkles = isVisible(15) || isVisible(16)
+        let hasKnees = isVisible(13) || isVisible(14)
+        let hasHips = isVisible(11) || isVisible(12)
+        let hasElbows = isVisible(7) || isVisible(8)
+        let hasShoulders = isVisible(5) || isVisible(6)
+        
+        // Feet (17-22)
         let hasFeet = keypoints.count > 22 && (17...22).contains(where: { isVisible($0) })
-
-        // 얼굴 랜드마크 개수 (23~90) - 프레임 내 체크
-        let faceKeypointCount = keypoints.count > 90 ? (23...90).filter { idx in
-            guard idx < keypoints.count else { return false }
-            let kp = keypoints[idx]
-            return kp.confidence > 0.3 &&
-                   kp.location.y >= 0.0 && kp.location.y <= 1.0
-        }.count : 0
-
-        // 디버그 로깅
-        print("📸 샷타입 판별: ankles=\(hasAnkles), knees=\(hasKnees), hips=\(hasHips), elbows=\(hasElbows), shoulders=\(hasShoulders), feet=\(hasFeet), faceCount=\(faceKeypointCount)")
-
-        // 샷타입 결정 (가장 아래에 보이는 부위 기준) - Python 로직과 동일
+        
+        // Face Count
+        let faceKeypointCount = keypoints.count > 90 ? (23...90).filter { isVisible($0) }.count : 0
+        
+        // 🆕 Edge Heuristics (하단에 걸쳐있는지 확인)
+        let kneeMaxY = getMaxY([13, 14])
+        let hipMaxY = getMaxY([11, 12])
+        
+        let isKneesLow = kneeMaxY > 0.85
+        let isHipsLow = hipMaxY > 0.85
+        
+        // Decision Tree
         if hasAnkles || hasFeet {
-            return .fullShot           // 전신샷
+            return .fullShot
         } else if hasKnees {
-            return .americanShot       // 무릎샷 (니샷)
+            // 무릎이 보이는데 아주 낮게(0.85+) 있으면 정강이까지 보이는 셈 -> Medium Full Shot
+            return isKneesLow ? .mediumFullShot : .americanShot
         } else if hasHips {
+            // 골반이 보이는데 아주 낮게 있으면 허벅지까지 보이는 셈 -> American Shot 근접? (보수적으로 MediumShot 유지하되, Elbow 체크)
             if hasElbows {
-                return .mediumShot     // 미디엄샷 (골반 + 팔꿈치)
+                return .mediumShot
             } else {
-                return .mediumCloseUp  // 바스트샷 (골반만)
+                return .mediumCloseUp
             }
         } else if hasElbows {
-            return .mediumCloseUp      // 바스트샷 (팔꿈치까지)
+            return .mediumCloseUp
         } else if hasShoulders {
             if faceKeypointCount > 50 {
-                return .closeUp        // 클로즈업 (어깨 + 얼굴 상세)
+                return .closeUp
             } else {
-                return .mediumCloseUp  // 바스트샷 (어깨만)
+                return .mediumCloseUp
             }
         } else {
-            return .extremeCloseUp     // 얼굴만
+            return .extremeCloseUp
         }
     }
 
@@ -197,14 +204,64 @@ enum ShotTypeGate: Int, CaseIterable {
 class GateSystem {
 
     // Gate 통과 기준
-    private let thresholds = GateThresholds()
+    // Gate 통과 기준
+    private let baseThresholds = GateThresholds()
+    
+    // 🆕 난이도 조절 (Phase 2 Adaptive Difficulty)
+    var difficultyMultiplier: CGFloat = 1.0
+    
+    private var thresholds: GateThresholds {
+        return baseThresholds.scaled(by: difficultyMultiplier)
+    }
 
     struct GateThresholds {
-        let aspectRatio: CGFloat = 1.0        // Gate 0: 비율 (완전 일치 필요)
-        let framing: CGFloat = 0.75           // Gate 1: 프레이밍 75% (🔧 상향)
-        let position: CGFloat = 0.80          // Gate 2: 위치/구도 80% (🔧 조정)
-        let compression: CGFloat = 0.70       // Gate 3: 압축감 70% (🔧 상향)
-        let pose: CGFloat = 0.70              // Gate 4: 포즈 70% (🔧 상향)
+        let aspectRatio: CGFloat
+        let framing: CGFloat
+        let position: CGFloat
+        let compression: CGFloat
+        let pose: CGFloat
+        
+        // 🆕 Configurable Hardcoded Values
+        let minPersonSize: CGFloat
+        let poseAngleThreshold: Float
+        
+        // 🆕 Multiplier 적용
+        func scaled(by multiplier: CGFloat) -> GateThresholds {
+            // multiplier > 1.0 -> 기준 완화 (Lower threshold for scores, Higher for errors)
+            // multiplier < 1.0 -> 기준 강화
+            
+            // 점수형 Gate (높을수록 좋음) -> Threshold 낮춤
+            let newFraming = max(0.1, framing / multiplier)
+            let newPosition = max(0.1, position / multiplier)
+            let newCompression = max(0.1, compression / multiplier)
+            let newPose = max(0.1, pose / multiplier)
+            // 최소 사이즈도 약간 완화
+            let newMinPersonSize = max(0.01, minPersonSize / multiplier)
+            
+            // 오차형 Gate (낮을수록 좋음) -> Threshold 높임
+            let newPoseAngle = poseAngleThreshold * Float(multiplier)
+            
+            return GateThresholds(
+                aspectRatio: aspectRatio, // 비율은 절대적
+                framing: newFraming,
+                position: newPosition,
+                compression: newCompression,
+                pose: newPose,
+                minPersonSize: newMinPersonSize,
+                poseAngleThreshold: newPoseAngle
+            )
+        }
+        
+        // Memberwise Init 추가 (구조체 기본 init이 private일 수 있으므로 명시)
+        init(aspectRatio: CGFloat = 1.0, framing: CGFloat = 0.75, position: CGFloat = 0.80, compression: CGFloat = 0.70, pose: CGFloat = 0.70, minPersonSize: CGFloat = 0.05, poseAngleThreshold: Float = 15.0) {
+            self.aspectRatio = aspectRatio
+            self.framing = framing
+            self.position = position
+            self.compression = compression
+            self.pose = pose
+            self.minPersonSize = minPersonSize
+            self.poseAngleThreshold = poseAngleThreshold
+        }
     }
 
     private let marginAnalyzer = MarginAnalyzer()
@@ -228,8 +285,8 @@ class GateSystem {
     ) -> GateEvaluation {
 
         // 🆕 현재 프레임에 인물이 있는지 체크
-        // BBox가 너무 작거나 (5% 미만) 없으면 인물 미검출로 판단
-        let minValidSize: CGFloat = 0.05  // 최소 5% 이상 차지해야 유효
+        // BBox가 너무 작거나 없으면 인물 미검출로 판단
+        let minValidSize: CGFloat = thresholds.minPersonSize  // Configurable Threshold
         let hasCurrentPerson = currentBBox.width > minValidSize && currentBBox.height > minValidSize
 
         // Gate 0: 비율 체크 (최우선) - 인물 없어도 체크 가능
@@ -274,7 +331,9 @@ class GateSystem {
             imageSize: currentImageSize,
             referenceBBox: referenceBBox,
             referenceImageSize: referenceImageSize,
-            isFrontCamera: isFrontCamera
+            isFrontCamera: isFrontCamera,
+            currentKeypoints: currentKeypoints,    // 🆕 v6
+            referenceKeypoints: referenceKeypoints // 🆕 v6
         )
 
         // Gate 3: 압축감 (35mm 환산 초점거리 기반)
@@ -282,7 +341,9 @@ class GateSystem {
             currentIndex: compressionIndex,
             referenceIndex: referenceCompressionIndex,
             currentFocal: currentFocalLength,
-            referenceFocal: referenceFocalLength
+            referenceFocal: referenceFocalLength,
+            currentKeypoints: currentKeypoints ?? [],
+            referenceKeypoints: referenceKeypoints ?? []
         )
 
         // Gate 4: 포즈
@@ -292,14 +353,29 @@ class GateSystem {
             hasCurrentPerson: hasCurrentPerson
         )
 
-        // 🔧 DEBUG: 각 Gate 점수 상세 로깅
-        print("📊 Gate 상세 점수:")
-        print("   G0 비율: \(String(format: "%.0f%%", gate0.score * 100)) (임계값: 100%) → \(gate0.passed ? "✅" : "❌")")
-        print("   G1 프레이밍: \(String(format: "%.0f%%", gate1.score * 100)) (임계값: 75%) → \(gate1.passed ? "✅" : "❌")")
-        print("   G2 위치: \(String(format: "%.0f%%", gate2.score * 100)) (임계값: 80%) → \(gate2.passed ? "✅" : "❌")")
-        print("   G3 압축감: \(String(format: "%.0f%%", gate3.score * 100)) (임계값: 70%) → \(gate3.passed ? "✅" : "❌")")
-        print("   G4 포즈: \(String(format: "%.0f%%", gate4.score * 100)) (임계값: 70%) → \(gate4.passed ? "✅" : "❌")")
-        print("   현재BBox: \(String(format: "(%.2f,%.2f) %.2fx%.2f", currentBBox.minX, currentBBox.minY, currentBBox.width, currentBBox.height))")
+        // 🔧 DEBUG: Gate System Analysis Log (User Requested)
+        print("\n📊 [GateSystem Analysis] ------------------------------------------------")
+        
+        // 1. 샷 타입 비교 로그 (Gate 1)
+        print(gate1.debugDescription) // GateResult에 debugDescription 확장 필요 또는 직접 포맷팅
+        
+        // 2. 여백/구도 문제 로그 (Gate 2)
+        print(gate2.debugDescription)
+        
+        // 3. 전체 요약 및 "통과했지만 부족한 점"
+        print("   ----------------------------------------------------------------")
+        let scores = [gate0.score, gate1.score, gate2.score, gate3.score, gate4.score]
+        let currentOverallScore = scores.reduce(0, +) / CGFloat(scores.count)
+        print("   [Result] Overall Score: \(String(format: "%.1f", currentOverallScore * 100)) / 100")
+        
+        let gates = [gate0, gate1, gate2, gate3, gate4]
+        for (i, gate) in gates.enumerated() {
+            let status = gate.passed ? "✅ PASS" : "❌ FAIL"
+            // 통과했더라도 만점이 아니면 코멘트 표시
+            let comment = gate.passed && gate.score < 0.99 ? "(부족: \(gate.feedback))" : gate.feedback
+            print("   Gate \(i) [\(gate.name)]: \(status) (\(String(format: "%.0f%%", gate.score * 100))) - \(comment)")
+        }
+        print("--------------------------------------------------------------------------\n")
 
         return GateEvaluation(gate0: gate0, gate1: gate1, gate2: gate2, gate3: gate3, gate4: gate4)
     }
@@ -360,14 +436,17 @@ class GateSystem {
         let isAtBottomEdge = bbox.maxY > (1.0 - edgeThreshold)
         let isAtLeftEdge = bbox.minX < edgeThreshold
         let isAtRightEdge = bbox.maxX > (1.0 - edgeThreshold)
-        let _ = isAtTopEdge || isAtBottomEdge || isAtLeftEdge || isAtRightEdge
-
+        
         // 신체가 가장자리 여러 곳에 닿아있으면 "너무 가까움" 판단
         let edgeCount = [isAtTopEdge, isAtBottomEdge, isAtLeftEdge, isAtRightEdge].filter { $0 }.count
         let isTooCloseAndCropped = edgeCount >= 2  // 2개 이상의 가장자리에 닿음
 
         var score: CGFloat = 1.0
         var feedback = "인물 크기가 프레임 대비 적절합니다"
+        
+        // 디버그용 변수
+        var refShotTypeStr: String? = nil
+        var shotTypeDistVal: Int? = nil
 
         if let refBBox = referenceBBox {
             // 🆕 v6: 레퍼런스 샷타입도 키포인트 기반 우선
@@ -379,22 +458,25 @@ class GateSystem {
                 let refHeightRatio = refBBox.height
                 refShotType = ShotTypeGate.fromBBoxHeight(refHeightRatio)
             }
+            
+            refShotTypeStr = refShotType.displayName
 
             // ============================================
             // 🔧 v8: Gate 1은 샷타입만 체크! (점유율은 Gate 2로)
             // ============================================
             // 샷 타입 거리 (0~7)
             let shotTypeDist = currentShotType.distance(to: refShotType)
+            shotTypeDistVal = shotTypeDist
 
             // 🔧 점수 = 샷타입만으로 계산 (점유율 제외!)
-            // 거리 1 = 인접 샷타입 (예: 바스트↔미디엄) → 허용
-            // 거리 2+ = 샷타입 차이가 큼 → 조정 필요
+            // 거리 1 = 인접 샷타입 -> 기존 0.85(Pass)에서 0.6(Fail)로 변경하여 정밀도 향상
+            // 사용자 피드백: "안 맞는데 체크됨" 방지
             if shotTypeDist == 0 {
                 score = 1.0  // 완벽 일치
-            } else if shotTypeDist == 1 {
-                score = 0.85  // 인접 샷타입 → 통과 (세부 조정은 Gate 2에서)
             } else {
-                score = max(0.3, 1.0 - CGFloat(shotTypeDist) * 0.2)
+                // 인접 샷타입(1)이라도 불일치로 간주하고 가이드 제공
+                // 점수: 0.6 (Threshold 0.75 미만 -> Fail)
+                score = max(0.3, 1.0 - CGFloat(shotTypeDist) * 0.4)
             }
 
             // 🆕 너무 가까워서 잘린 경우 특별 처리
@@ -412,20 +494,22 @@ class GateSystem {
                     ? "너무 가까워요! \(croppedDesc)이 잘렸어요. 뒤로 물러나세요"
                     : "피사체가 너무 가까워요! \(croppedDesc)이 잘렸어요. 뒤로 가세요"
             }
-            // 🔧 샷타입 거리 2 이상만 피드백 (1은 허용)
-            else if shotTypeDist >= 2 {
+            // 🔧 샷타입 거리 1 이상이면 피드백 제공 (점수 0.6 Fail 대응)
+            else if shotTypeDist >= 1 {
                 let steps = max(1, shotTypeDist)
+                let isMinor = shotTypeDist == 1
+                let prefix = isMinor ? "아주 조금만" : "약 \(steps)걸음"
 
                 if currentShotType.rawValue > refShotType.rawValue {
                     // 현재가 더 넓음 (전신) → 가까이
                     feedback = isFrontCamera
-                        ? "\(currentShotType.displayName) → \(refShotType.displayName). 약 \(steps)걸음 앞으로"
-                        : "\(currentShotType.displayName) → \(refShotType.displayName). 약 \(steps)걸음 가까이"
+                        ? "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 앞으로"
+                        : "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 가까이"
                 } else {
                     // 현재가 더 좁음 (클로즈업) → 뒤로
                     feedback = isFrontCamera
-                        ? "\(currentShotType.displayName) → \(refShotType.displayName). 약 \(steps)걸음 뒤로"
-                        : "\(currentShotType.displayName) → \(refShotType.displayName). 약 \(steps)걸음 뒤로"
+                        ? "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 뒤로"
+                        : "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 뒤로"
                 }
             }
             // 🔧 샷타입 OK (거리 0~1) → 세부 조정은 Gate 2에서 처리
@@ -447,13 +531,17 @@ class GateSystem {
             }
         }
 
+        
+        let debugInfoText = "Shot: \(currentShotType.displayName) vs Ref: \(refShotTypeStr ?? "None") (Dist: \(shotTypeDistVal ?? -1))"
+
         return GateResult(
             name: "프레이밍",
             score: score,
             threshold: thresholds.framing,
             feedback: feedback,
             icon: "📸",
-            category: "framing"
+            category: "framing",
+            debugInfo: debugInfoText
         )
     }
 
@@ -463,15 +551,27 @@ class GateSystem {
         imageSize: CGSize,
         referenceBBox: CGRect?,
         referenceImageSize: CGSize?,
-        isFrontCamera: Bool
+        isFrontCamera: Bool,
+        currentKeypoints: [PoseKeypoint]? = nil,    // 🆕 v6
+        referenceKeypoints: [PoseKeypoint]? = nil   // 🆕 v6
     ) -> GateResult {
 
+        // 🆕 v8: Keypoint Alignment 우선 시도
+        if let currentKP = currentKeypoints, let refKP = referenceKeypoints,
+           let kpResult = evaluateKeypointAlignment(current: currentKP, reference: refKP, isFrontCamera: isFrontCamera) {
+            return kpResult
+        }
+        
+        // Fallback: 기존 BBox Margin 기반 로직
         // 현재 여백 분석
         let curMargins = marginAnalyzer.analyze(bbox: bbox, imageSize: imageSize)
 
         var score: CGFloat = 1.0
         var feedback = "인물 위치가 레퍼런스와 잘 맞습니다"
         var feedbackParts: [String] = []
+        
+        // 디버그 정보
+        var debugDetails: String = "Cur Margins: L\(String(format: "%.2f", curMargins.leftRatio)) R\(String(format: "%.2f", curMargins.rightRatio)) T\(String(format: "%.2f", curMargins.topRatio)) B\(String(format: "%.2f", curMargins.bottomRatio))"
 
         // 🆕 v6: 프레임 밖 경고 우선 표시
         if let warning = curMargins.outOfFrameWarning {
@@ -481,6 +581,7 @@ class GateSystem {
         if let refBBox = referenceBBox, let refSize = referenceImageSize {
             // 레퍼런스와 비교
             let refMargins = marginAnalyzer.analyze(bbox: refBBox, imageSize: refSize)
+            debugDetails += "\n      Ref Margins: L\(String(format: "%.2f", refMargins.leftRatio)) R\(String(format: "%.2f", refMargins.rightRatio)) T\(String(format: "%.2f", refMargins.topRatio)) B\(String(format: "%.2f", refMargins.bottomRatio))"
 
             // 🆕 v6: 좌우 균형 분석 (Python _analyze_horizontal_balance)
             let horizontalResult = analyzeHorizontalBalance(
@@ -557,7 +658,8 @@ class GateSystem {
             threshold: thresholds.position,
             feedback: feedback,
             icon: "↔️",
-            category: "position"
+            category: "position",
+            debugInfo: debugDetails
         )
     }
 
@@ -762,15 +864,19 @@ class GateSystem {
     private func evaluateCompression(
         currentIndex: CGFloat?,
         referenceIndex: CGFloat?,
-        currentFocal: FocalLengthInfo? = nil,
-        referenceFocal: FocalLengthInfo? = nil
+        currentFocal: FocalLengthInfo?,
+        referenceFocal: FocalLengthInfo?,
+        currentKeypoints: [PoseKeypoint],
+        referenceKeypoints: [PoseKeypoint]
     ) -> GateResult {
 
         // 🆕 35mm 환산 초점거리 우선 사용
         if let currentFL = currentFocal {
             return evaluateCompressionByFocalLength(
                 current: currentFL,
-                reference: referenceFocal
+                reference: referenceFocal,
+                currentKeypoints: currentKeypoints,
+                referenceKeypoints: referenceKeypoints
             )
         }
 
@@ -847,36 +953,49 @@ class GateSystem {
     // 🆕 35mm 환산 초점거리 기반 압축감 평가
     private func evaluateCompressionByFocalLength(
         current: FocalLengthInfo,
-        reference: FocalLengthInfo?
+        reference: FocalLengthInfo?,
+        currentKeypoints: [PoseKeypoint],
+        referenceKeypoints: [PoseKeypoint]
     ) -> GateResult {
 
         let currentMM = current.focalLength35mm
         let currentLens = current.lensType
 
-        var score: CGFloat = 1.0
-        var feedback = "\(currentMM)mm \(currentLens.displayName)으로 촬영 중"
-
-        // 🔧 v8: 레퍼런스 초점거리가 없으면 기본값 50mm 사용 (스마트폰 표준)
-        // ⚠️ EXIF가 없어도 상대 비교 가능하도록!
-        let refMM: Int
-        let isEstimated: Bool
-
-        if let ref = reference {
-            refMM = ref.focalLength35mm
-            let _ = ref.lensType  // lensType은 로깅용으로만 사용
-            isEstimated = ref.source == .fallback || ref.confidence < 0.5
-        } else {
-            // 🆕 레퍼런스 EXIF 없음 → 50mm (표준 렌즈) 가정
-            refMM = 50
-            isEstimated = true
-            print("📐 [압축감] 레퍼런스 EXIF 없음 → 기본값 50mm 사용")
+        // 🔧 v8 Refactor: 레퍼런스 초점거리 정보가 없으면 평가 생략하되,
+        // AI 추정값(.depthEstimate)이 있으면 평가를 진행 (User Request)
+        // .fallback(기본값 50mm)인 경우에만 평가 생략 (Soft Pass)
+        guard let ref = reference else {
+            // 아예 데이터가 없는 경우
+            return createSkippedCompressionResult(currentMM)
+        }
+        
+        // 🆕 Fallback(단순 추측)인 경우에만 생략
+        if ref.source == .fallback {
+            print("📐 [압축감] 레퍼런스 EXIF 없음 & 뎁스 추정 실패 → 평가 생략 (Score 1.0)")
+            return createSkippedCompressionResult(currentMM)
         }
 
+        // Helper to convert % difference to "steps"
+        func toSteps(percent: CGFloat) -> Int {
+            return max(1, Int(round(percent * 10))) // 10% diff = 1 step
+        }
+        
+        var isDistanceMismatch = false // 🆕 Scope fix: Declare early
+        
+        let refMM = ref.focalLength35mm
+        
+        var score: CGFloat = 1.0
+        var feedback = "\(currentMM)mm \(currentLens.displayName)으로 촬영 중"
+        
         let diff = abs(currentMM - refMM)
 
         // 점수 계산: 초점거리 차이에 따라 감점
         // 🔧 v8: 더 민감하게 (5mm 차이마다 10% 감점)
         score = max(0, 1.0 - CGFloat(diff) / 50.0)
+        
+        // 🆕 AI 추정값 사용 시 신뢰도 반영 (감점 요인 X, 정보 표시용)
+        let isEstimated = ref.source == .depthEstimate || ref.confidence < 0.8
+        let reliabilityIcon = isEstimated ? "🪄" : "📸"
 
         // 🔧 v8: 임계값 10mm로 낮춤 (더 민감하게 체크)
         if diff > 10 {
@@ -884,23 +1003,66 @@ class GateSystem {
             let zoomText = String(format: "%.1fx", targetZoom)
 
             if currentMM < refMM {
-                // 현재가 더 광각 → 줌인 필요
-                feedback = "📐 \(zoomText)로 줌인 (현재 \(currentMM)mm → \(refMM)mm)"
+                // 현재가 더 광각 (예: 24mm) vs 목표가 망원 (예: 50mm)
+                // 원근감이 너무 강함 → 뒤로 물러나서(원근감 줄임) + 줌인(피사체 크기 유지)
+                feedback = "📐 뒤로 물러나서 \(zoomText)로 줌인 (배경 압축)"
             } else {
-                // 현재가 더 망원 → 줌아웃 필요
-                feedback = "📐 \(zoomText)로 줌아웃 (현재 \(currentMM)mm → \(refMM)mm)"
+                // 현재가 더 망원 (예: 70mm) vs 목표가 광각 (예: 24mm)
+                // 원근감이 너무 없음 → 앞으로 다가가서(원근감 강조) + 줌아웃(피사체 크기 유지)
+                feedback = "📐 앞으로 다가가서 \(zoomText)로 줌아웃 (원근감 강조)"
             }
-
+            
+            // 추정값인 경우 표시 (User Feedback 반영)
             if isEstimated {
-                feedback += " [추정]"
+                feedback += " [AI 추정]"
             }
         } else {
-            // 차이가 적음 → 유사함
-            feedback = "✓ 압축감 OK (\(currentMM)mm)"
+            // Lens Focal Length Matches (< 10mm Diff) -> Now Check Scale/Distance
+            
+            // var isDistanceMismatch = false <- Removed (declared at top)
+            
+            // 🆕 Distance Consistency Check
+            if let currStruct = BodyStructure.extract(from: currentKeypoints),
+               let refStruct = BodyStructure.extract(from: referenceKeypoints) {
+                
+                // Only if Tiers match (e.g. both Full Body)
+                if currStruct.lowestTier == refStruct.lowestTier {
+                    let scaleRatio = currStruct.spanY / max(0.01, refStruct.spanY)
+                    let scaleDiff = abs(1.0 - scaleRatio)
+                     
+                    // Tolerance 15% (Strict but fair)
+                    if scaleDiff > 0.15 {
+                        isDistanceMismatch = true
+                        
+                        // Penalty
+                        score = max(0.2, score - scaleDiff) // Significantly degrade score
+                        
+                        let steps = toSteps(percent: scaleDiff * 50)
+                        if scaleRatio > 1.0 {
+                            feedback = "렌즈는 비슷하지만 너무 가깝습니다. 뒤로 \(steps) 물러나세요 (원근감 불일치)"
+                        } else {
+                            feedback = "렌즈는 비슷하지만 너무 멉니다. 앞으로 \(steps) 다가가세요 (원근감 불일치)"
+                        }
+                    }
+                    
+                    // 🔧 DEBUG LOGGING (Inside scope)
+                    // if isDistanceMismatch { ... } // 불필요하게 복잡해지지 않도록 통합
+                    // print("   🔭 [Gate 3 Distance Check] ...")
+                    if isDistanceMismatch {
+                         print("   🔭 [Gate 3 Distance Check] FAIL: Scale Diff \(String(format: "%.2f", abs(1.0 - (currStruct.spanY)/(max(0.01, refStruct.spanY))))) > 15%")
+                    }
+                }
+            }
+            
+            if !isDistanceMismatch {
+                // 차이가 적음 & 거리도 비슷함 -> 유사함
+                feedback = "✓ 압축감/거리 완벽함 (\(currentMM)mm)"
+                if isEstimated { feedback += " \(reliabilityIcon)" }
+            }
         }
 
         // 🆕 항상 디버그 출력
-        print("📐 [압축감] 현재:\(currentMM)mm vs 목표:\(refMM)mm → 차이:\(diff)mm, 점수:\(String(format: "%.2f", score)), 통과:\(score >= thresholds.compression)")
+        print("📐 [압축감(\(ref.source))] 현재:\(currentMM)mm vs 목표:\(refMM)mm → 점수:\(String(format: "%.2f", score))")
 
         return GateResult(
             name: "압축감",
@@ -908,7 +1070,20 @@ class GateSystem {
             threshold: thresholds.compression,
             feedback: feedback,
             icon: "🔭",
-            category: "compression"
+            category: "compression",
+            debugInfo: "Lens: \(currentMM)mm vs \(refMM)mm (\(isDistanceMismatch ? "DistMismatch" : "DistOK"))"
+        )
+    }
+    
+    // 🆕 Helper: 압축감 평가 생략 결과 생성
+    private func createSkippedCompressionResult(_ currentMM: Int) -> GateResult {
+        return GateResult(
+            name: "압축감",
+            score: 1.0,
+            threshold: thresholds.compression,
+            feedback: "레퍼런스 렌즈 정보 없음 (현재: \(currentMM)mm)",
+            icon: "🔭",
+            category: "compression_skipped"
         )
     }
 
@@ -947,7 +1122,7 @@ class GateSystem {
         let score = CGFloat(pose.overallAccuracy)
 
         // 각도 차이가 큰 부위 찾기
-        let angleDiffThreshold: Float = 15.0
+        let angleDiffThreshold: Float = thresholds.poseAngleThreshold
         var feedbackParts: [String] = []
 
         // 우선순위 순서로 체크
@@ -997,6 +1172,206 @@ class GateSystem {
             feedback: feedback,
             icon: "🤸",
             category: "pose"
+        )
+    }
+
+    // MARK: - 🆕 v8 Robust Keypoint Alignment Logic (RTMPose 133 Support)
+    
+    private struct BodyStructure {
+        let centroid: CGPoint
+        let topAnchorY: CGFloat
+        let spanY: CGFloat
+        let lowestTier: Int // 0:Shoulder, 1:Hip, 2:Knee, 3:Ankle
+        
+        static func extract(from keypoints: [PoseKeypoint]) -> BodyStructure? {
+            // Helper: Safe Keypoint Access
+            func getPoint(_ idx: Int) -> CGPoint? {
+                guard idx < keypoints.count, keypoints[idx].confidence > 0.3 else { return nil }
+                return keypoints[idx].location
+            }
+            
+            // 1. Dynamic Centroid (Robust to occlusion)
+            // Candidates: Nose(0), Eyes(1,2), Ears(3,4), Shoulders(5,6), Hips(11,12)
+            // RTMPose 133: Hands(91-132), Feet(17-22), Face(23-90) included if highly confident
+            
+            var validPoints: [CGPoint] = []
+            
+            // Body & Head Anchors
+            let coreIndices = [0, 1, 2, 3, 4, 5, 6, 11, 12]
+            for idx in coreIndices {
+                if let p = getPoint(idx) { validPoints.append(p) }
+            }
+            
+            // If body is sparse, try face contour for head center (Back view/Side view fallback)
+            if validPoints.count < 3 {
+                for idx in 23...90 { // Face alignment
+                     if let p = getPoint(idx) { validPoints.append(p) }
+                }
+            }
+            
+            guard !validPoints.isEmpty else { return nil }
+            
+            let centroidX = validPoints.reduce(0) { $0 + $1.x } / CGFloat(validPoints.count)
+            let centroidY = validPoints.reduce(0) { $0 + $1.y } / CGFloat(validPoints.count)
+            
+            // 2. Vertical Span & Topology Tier
+            // Determines "Lowest Visible Part" to ensure we compare apples to apples.
+            
+            var lowestY: CGFloat?
+            var currentTier = 0
+            
+            // Check Tier 3: Ankles/Feet (Full Shot)
+            let feetIndices = [15, 16] + Array(17...22)
+            if let maxFeet = feetIndices.compactMap({ getPoint($0)?.y }).max() {
+                lowestY = maxFeet
+                currentTier = 3
+            } 
+            // Check Tier 2: Knees (American Shot)
+            else if let maxKnee = [13, 14].compactMap({ getPoint($0)?.y }).max() {
+                lowestY = maxKnee
+                currentTier = 2
+            }
+            // Check Tier 1: Hips (Medium Shot)
+            else if let maxHip = [11, 12].compactMap({ getPoint($0)?.y }).max() {
+                lowestY = maxHip
+                currentTier = 1
+            }
+            // Tier 0: Shoulders (Close Up) - Fallback
+            else {
+                lowestY = [5, 6].compactMap({ getPoint($0)?.y }).max()
+                currentTier = 0
+            }
+            
+            guard let bottomY = lowestY else { return nil }
+            
+            // Top Anchor: Nose > Eyes > Ears > Head Top (Face Contour Min)
+            let topCandidates = [0, 1, 2, 3, 4]
+            var topY = topCandidates.compactMap({ getPoint($0)?.y }).min()
+            
+            if topY == nil {
+                // Fallback to face contour or shoulders
+                topY = (Array(23...90) + [5, 6]).compactMap({ getPoint($0)?.y }).min()
+            }
+            
+            guard let validTopY = topY else { return nil }
+            
+            return BodyStructure(
+                centroid: CGPoint(x: centroidX, y: centroidY),
+                topAnchorY: validTopY,
+                spanY: bottomY - validTopY,
+                lowestTier: currentTier
+            )
+        }
+    }
+    
+    private func evaluateKeypointAlignment(
+        current: [PoseKeypoint],
+        reference: [PoseKeypoint],
+        isFrontCamera: Bool
+    ) -> GateResult? {
+        guard let currStruct = BodyStructure.extract(from: current),
+              let refStruct = BodyStructure.extract(from: reference) else {
+            return nil
+        }
+        
+        var score: CGFloat = 1.0
+        var feedbackParts: [String] = []
+        
+        // 1. Horizontal Alignment (Centroid X)
+        let diffX = currStruct.centroid.x - refStruct.centroid.x
+        let thresholdX: CGFloat = 0.05
+        
+        if abs(diffX) > thresholdX {
+            let percent = Int(abs(diffX) * 100)
+            let steps = toSteps(percent: CGFloat(percent))
+            
+            if diffX > 0 {
+                // Live Right -> Move Left
+                 if isFrontCamera {
+                     feedbackParts.append("왼쪽으로 \(steps) 이동")
+                } else {
+                     feedbackParts.append("카메라를 오른쪽으로 이동") // Camera Right -> Subject Left
+                }
+            } else {
+                // Live Left -> Move Right
+                 if isFrontCamera {
+                     feedbackParts.append("오른쪽으로 \(steps) 이동")
+                } else {
+                     feedbackParts.append("카메라를 왼쪽으로 이동")
+                }
+            }
+            score -= abs(diffX) * 2.0
+        }
+        
+        // 2. Topology Check & Vertical Scale
+        // Only compare Scale if Tiers match (e.g. both are Full Shots).
+        // If mismatched (e.g. Full vs Upper), Scale comparison is invalid.
+        
+        if currStruct.lowestTier == refStruct.lowestTier {
+            let scaleRatio = currStruct.spanY / max(0.01, refStruct.spanY)
+            let scaleDiff = abs(1.0 - scaleRatio)
+            
+            if scaleDiff > 0.08 { // 8% difference
+                score -= scaleDiff
+                let steps = toSteps(percent: scaleDiff * 50)
+                
+                if scaleRatio > 1.0 {
+                    // Too Big -> Move Back
+                    feedbackParts.append(isFrontCamera ? "뒤로 \(steps) 가세요" : "뒤로 물러나세요")
+                } else {
+                    // Too Small -> Move Forward
+                    feedbackParts.append(isFrontCamera ? "앞으로 \(steps) 가세요" : "가까이 다가가세요")
+                }
+                
+                // If scale is way off, skip Tilt check
+                if scaleDiff > 0.25 {
+                     return GateResult(
+                        name: "위치(거리)",
+                        score: max(0.2, score),
+                        threshold: thresholds.position,
+                        feedback: feedbackParts.joined(separator: "\n"),
+                        icon: "↔️",
+                        category: "position_keypoint"
+                    )
+                }
+            }
+        }
+        
+        // 3. Vertical Tilt (Top Anchor)
+        // Only valid if Scale is roughly correct OR Tier matches
+        let diffY = currStruct.topAnchorY - refStruct.topAnchorY
+        
+        if abs(diffY) > 0.05 {
+             let angle = toTiltAngle(percent: abs(diffY) * 100)
+             score -= abs(diffY) * 2.0
+             
+             if diffY > 0 {
+                 // Live Lower -> Tilt DOWN
+                 feedbackParts.append("카메라를 \(angle)° 아래로 틸트")
+             } else {
+                 // Live Higher -> Tilt UP
+                 feedbackParts.append("카메라를 \(angle)° 위로 틸트")
+             }
+        }
+        
+        if feedbackParts.isEmpty {
+            return GateResult(
+                name: "위치",
+                score: 1.0,
+                threshold: thresholds.position,
+                feedback: "✓ 위치/크기 완벽함",
+                icon: "✨",
+                category: "position_perfect"
+            )
+        }
+        
+        return GateResult(
+            name: "위치",
+            score: max(0.1, score),
+            threshold: thresholds.position,
+            feedback: feedbackParts.joined(separator: "\n"),
+            icon: "↔️",
+            category: "position_keypoint"
         )
     }
 }

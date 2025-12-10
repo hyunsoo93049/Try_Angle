@@ -110,5 +110,38 @@ The following ML Model files are **too large for GitHub** (>100MB) and are curre
 
 *Without these files, the Gate System will not function.*
 
+
+## 8. Future Optimizations (Phase 2 Design Specification)
+
+The following features were designed during the iOS Phase 2 planning but were not implemented in the iOS v1.5 code. **Android implementation should prioritize these for a superior UX.**
+
+### A. Temporal Lock (Circular Stability Check)
+*   **Problem**: Users accidentally trigger "Success" by passing through the correct position for just 1 frame (0.03s), leading to blurry or misaligned photos.
+*   **Design**:
+    1.  **State Machine**:
+        *   `Searching`: Any Gate < Threshold.
+        *   `Arming`: All Gates >= Threshold. Start 0.5s timer.
+        *   `Locked`: Timer >= 0.5s. Fire Shutter.
+    2.  **Reset Rule**: If any Gate fails during `Arming`, reset to `Searching` immediately.
+    3.  **UI**:
+        *   Display a **Circular Ring** in the center (or around the feedback overlay).
+        *   Fill the ring **Counter-Clockwise (CCW)** from 0% to 100% (Yellow -> Green).
+        *   Provide haptic feedback on `Locked` state.
+
+### B. Adaptive Difficulty (Smart Thresholds)
+*   **Problem**: Fixed thresholds (e.g., 70%) frustrate users who cannot physically match the exact pose.
+*   **Design**:
+    1.  **Frustration Detection**: Track how long a specific Gate has been failing continuously.
+    2.  **Trigger**: If `fail_duration > 5.0s`, trigger "Relax Mode".
+    3.  **Action**:
+        *   Multiply current thresholds by `1.2x` (20% wider tolerance).
+        *   Show encouraging UI message: "This looks good enough! 👍"
+    4.  **Reset**: Reset thresholds on successful capture or scene change.
+
+### C. Environment Check (Pre-Gate)
+*   **Logic**: Before Gate 0 (Ratio), check:
+    *   **Low Light**: If brightness < threshold, pause analysis and warn "Too Dark 💡".
+    *   **Motion Blur**: If accelerometer > threshold, warn "Steady Hand ✋".
+
 ---
 *Created by Antigravity Assistant for Android Developer Handover.*

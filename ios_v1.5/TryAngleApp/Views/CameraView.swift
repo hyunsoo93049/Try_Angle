@@ -25,15 +25,13 @@ struct CameraView: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            DispatchQueue.main.async {
-                previewLayer.frame = uiView.bounds
-                
-                // 16:9(Full Screen)일 때만 Fill로 설정하여 "확대된 느낌" 구현
-                if context.coordinator.cameraManager.aspectRatio == .ratio16_9 {
-                    previewLayer.videoGravity = .resizeAspectFill
-                } else {
-                    previewLayer.videoGravity = .resizeAspect
-                }
+            previewLayer.frame = uiView.bounds
+            
+            // 16:9(Full Screen)일 때만 Fill로 설정하여 "확대된 느낌" 구현
+            if context.coordinator.cameraManager.aspectRatio == .ratio16_9 {
+                previewLayer.videoGravity = .resizeAspectFill
+            } else {
+                previewLayer.videoGravity = .resizeAspect
             }
         }
     }

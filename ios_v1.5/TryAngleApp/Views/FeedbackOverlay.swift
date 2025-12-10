@@ -7,6 +7,8 @@ struct FeedbackOverlay: View {
     let processingTime: String
     let gateEvaluation: GateEvaluation?  // 🆕 Gate System 평가 결과
     let unifiedFeedback: UnifiedFeedback?  // 🆕 통합 피드백 (하나의 동작 → 여러 Gate 해결)
+    let stabilityProgress: Float  // 🆕 0.0 ~ 1.0 (Temporal Lock 진행도)
+    let environmentWarning: String?  // 🆕 환경 경고 (너무 어두움 등)
 
     var body: some View {
         let _ = {
@@ -26,6 +28,27 @@ struct FeedbackOverlay: View {
                     Spacer()
                 }
                 Spacer()
+            }
+
+            // 🆕 중앙: Temporal Lock (Circular Ring)
+            if stabilityProgress > 0.0 {
+                VStack {
+                    Spacer()
+                    ZStack {
+                        CircularGateProgressView(progress: stabilityProgress)
+                        
+                        if stabilityProgress >= 1.0 {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.white)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .padding(.bottom, 300) // 피드백 텍스트 위쪽
+                    Spacer()
+                }
+                .transition(.opacity)
+                .animation(.easeInOut, value: stabilityProgress > 0)
             }
 
             // 기존 레이아웃: 상단 + 하단 피드백
@@ -86,6 +109,22 @@ struct FeedbackOverlay: View {
                 .animation(.spring(response: 0.5, dampingFraction: 0.85), value: unifiedFeedback?.stableId ?? currentGateFeedback)  // 🔑 안정적인 애니메이션
                 .padding(.horizontal, 16)
                 .padding(.bottom, 120)
+            }
+            
+            // 🆕 환경 경고 (최상단)
+            if let warning = environmentWarning {
+                VStack {
+                    Text(warning)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(12)
+                        .padding(.top, 100)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: warning)
             }
         }
     }
@@ -583,7 +622,9 @@ struct FeedbackOverlay_Previews: PreviewProvider {
                         "배경 압축이 자연스러워집니다"
                     ],
                     priority: 1
-                )
+                ),
+                stabilityProgress: 0.5,
+                environmentWarning: nil
             )
 
             // 기존 Gate 피드백 미리보기
@@ -607,9 +648,39 @@ struct FeedbackOverlay_Previews: PreviewProvider {
                 completedFeedbacks: [],
                 processingTime: "0.8s",
                 gateEvaluation: nil,
-                unifiedFeedback: nil
+                unifiedFeedback: nil,
+                stabilityProgress: 0.0,
+                environmentWarning: "너무 어두워요 💡"
             )
         }
         .background(Color.black)
+    }
+}
+
+
+// MARK: - 🆕 Temporal Lock UI (Circular Ring)
+struct CircularGateProgressView: View {
+    let progress: Float
+    
+    var body: some View {
+        ZStack {
+            // 배경 링
+            Circle()
+                .stroke(Color.white.opacity(0.3), lineWidth: 6)
+            
+            // 진행 링 (반시계 방향 CCW)
+            // SwiftUI trim은 기본적으로 시계방향이므로, scaleEffect(x:-1)로 반전
+            Circle()
+                .trim(from: 0.0, to: CGFloat(progress))
+                .stroke(
+                    progress >= 1.0 ? Color.green : Color.yellow,
+                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                )
+                .rotationEffect(Angle(degrees: -90)) // 12시 방향부터 시작
+                .scaleEffect(x: -1, y: 1) // 반시계 방향으로 채우기
+                .animation(.linear(duration: 0.05), value: progress)
+        }
+        .frame(width: 80, height: 80)
+        .shadow(color: .black.opacity(0.3), radius: 4)
     }
 }

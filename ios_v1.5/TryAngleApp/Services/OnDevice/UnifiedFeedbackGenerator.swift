@@ -105,13 +105,13 @@ struct UnifiedFeedback: Equatable {
             case .zoomOut:
                 return "\(zoomText)로 줌아웃"
             case .zoomInThenMoveBack:
-                return "\(zoomText)로 줌인 후, \(magnitude) 뒤로"
+                return "\(zoomText)로 줌인 후, \(magnitude) 뒤로 (배경 압축)"
             case .zoomInThenMoveForward:
-                return "\(zoomText)로 줌인 후, \(magnitude) 앞으로"
+                return "\(zoomText)로 줌인 후, \(magnitude) 앞으로 (배경 압축)"
             case .zoomOutThenMoveBack:
-                return "\(zoomText)로 줌아웃 후, \(magnitude) 뒤로"
+                return "\(zoomText)로 줌아웃 후, \(magnitude) 뒤로 (원근감 강조)"
             case .zoomOutThenMoveForward:
-                return "\(zoomText)로 줌아웃 후, \(magnitude) 앞으로"
+                return "\(zoomText)로 줌아웃 후, \(magnitude) 앞으로 (원근감 강조)"
             default:
                 return "\(magnitude) \(primaryAction.rawValue)"
             }

@@ -15,6 +15,8 @@ struct AnalysisState: Equatable {
     var gateEvaluation: GateEvaluation?
     var v15Feedback: String = ""
     var unifiedFeedback: UnifiedFeedback?
+    var stabilityProgress: Float = 0.0 // 🆕 0.0 ~ 1.0 (Temporal Lock)
+    var environmentWarning: String?      // 🆕 환경 경고 (너무 어두움 등)
 }
 
 // MARK: - 실시간 분석을 위한 데이터 구조
@@ -66,8 +68,10 @@ class RealtimeAnalyzer: ObservableObject {
     var gateEvaluation: GateEvaluation? { state.gateEvaluation }
     var v15Feedback: String { state.v15Feedback }
     var unifiedFeedback: UnifiedFeedback? { state.unifiedFeedback }
+    var stabilityProgress: Float { state.stabilityProgress }
+    var environmentWarning: String? { state.environmentWarning }
 
-    // 🐛 ContentView에서 접근 가능하도록 internal로 변경
+    // 🐛 ContentView에서 접근 가능하도ㄱ록 internal로 변경
     var referenceAnalysis: FrameAnalysis?
     var referenceFramingResult: PhotographyFramingResult?  // 🆕 레퍼런스 사진학 프레이밍 분석 결과
 
@@ -86,7 +90,16 @@ class RealtimeAnalyzer: ObservableObject {
     private var feedbackHistory: [String: Int] = [:]  // 카테고리별 연속 감지 횟수
     private let historyThreshold = 3  // 🔄 3번 연속 감지되어야 표시 (약 0.3초) - 반응속도 개선
     private var perfectFrameCount = 0  // 완벽한 프레임 연속 횟수
-    private let perfectThreshold = 5  // 5프레임(약 0.5초) 연속 완벽해야 감지 - 반응속도 개선
+    private let perfectThreshold = 5  // 유지용 (Temporal Lock 이전 하위 호환)
+
+    // 🆕 Phase 2: Temporal Lock (안정화 타이머)
+    private enum GateStabilityState: Equatable {
+        case idle
+        case arming(startedAt: Date)
+        case locked
+    }
+    private var stabilityState: GateStabilityState = .idle
+    private let lockDuration: TimeInterval = 0.5  // 0.5초 유지 시 성공
 
     // 🆕 고정 피드백 (한 번 표시되면 해결될 때까지 유지)
     private var stickyFeedbacks: [String: FeedbackItem] = [:]  // 카테고리별 고정 피드백
@@ -96,6 +109,11 @@ class RealtimeAnalyzer: ObservableObject {
     // 🆕 완료 감지를 위한 히스테리시스
     private var disappearedFeedbackHistory: [String: Int] = [:]  // 사라진 피드백의 연속 횟수
     private let disappearedThreshold = 2  // 2번 연속 사라져야 완료로 판단 - 반응속도 개선
+
+    // 🆕 Phase 2: Adaptive Difficulty (좌절 감지)
+    private var feedbackStartTimes: [String: Date] = [:]
+    private var frustrationMultiplier: CGFloat = 1.0
+    private let frustrationThreshold: TimeInterval = 5.0 // 5초간 해결 못하면 난이도 완화
 
     // 🆕 고정 피드백 카테고리 (포즈 관련은 계속 표시)
     // pose_missing_parts는 이제 레퍼런스 기반으로 제대로 감지되므로 sticky 처리
@@ -119,6 +137,9 @@ class RealtimeAnalyzer: ObservableObject {
     
     // MARK: - Subscription Setup
     func setupSubscription(framePublisher: AnyPublisher<CMSampleBuffer, Never>, cameraManager: CameraManager) {
+        // 🔥 중복 구독 방지: 기존 구독 취소
+        cancellables.removeAll()
+        
         framePublisher
             .sink { [weak self] buffer in
                 guard let self = self else { return }
@@ -184,8 +205,14 @@ class RealtimeAnalyzer: ObservableObject {
             
             let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .up)
             
+            // 🆕 밝기 추출 (Exif BrightnessValue)
+            var brightness: Double?
+            if let exif = ciImage.properties["{Exif}"] as? [String: Any] {
+                brightness = exif["BrightnessValue"] as? Double
+            }
+            
             // Proceed to analyze
-            self.analyzeFrameInternal(image, isFrontCamera: isFrontCamera, currentAspectRatio: currentAspectRatio)
+            self.analyzeFrameInternal(image, isFrontCamera: isFrontCamera, currentAspectRatio: currentAspectRatio, brightness: brightness)
         }
     }
     
@@ -226,15 +253,15 @@ class RealtimeAnalyzer: ObservableObject {
 
     // 🆕 초기화
     init() {
-        print("🎬🎬🎬 RealtimeAnalyzer init() 호출됨 🎬🎬🎬")
+        // print("🎬🎬🎬 RealtimeAnalyzer init() 호출됨 🎬🎬🎬")
 
         // 🔥 PoseMLAnalyzer를 백그라운드에서 미리 로드 (앱 시작 시 17초 지연 방지)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 백그라운드 초기화 시작")
+            // print("🔥 RealtimeAnalyzer: PoseMLAnalyzer 백그라운드 초기화 시작")
             let startTime = CACurrentMediaTime()
             let analyzer = PoseMLAnalyzer()
             let loadTime = (CACurrentMediaTime() - startTime) * 1000
-            print("✅ RealtimeAnalyzer: PoseMLAnalyzer 초기화 완료 (\(String(format: "%.0f", loadTime))ms)")
+            // print("✅ RealtimeAnalyzer: PoseMLAnalyzer 초기화 완료 (\(String(format: "%.0f", loadTime))ms)")
 
             DispatchQueue.main.async {
                 self?.poseMLAnalyzer = analyzer
@@ -361,19 +388,19 @@ class RealtimeAnalyzer: ObservableObject {
             return
         }
 
-        print("🎯 레퍼런스 이미지 크기: \(cgImage.width) x \(cgImage.height)")
-        print("🎯 레퍼런스 이미지 orientation: \(image.imageOrientation.rawValue)")
+        // print("🎯 레퍼런스 이미지 크기: \(cgImage.width) x \(cgImage.height)")
+        // print("🎯 레퍼런스 이미지 orientation: \(image.imageOrientation.rawValue)")
 
         // 🔥 RTMPose로 얼굴+포즈 동시 분석 (ONNX Runtime with CoreML EP)
-        print("🎯 PoseMLAnalyzer.analyzeFaceAndPose() 호출 중...")
+        // print("🎯 PoseMLAnalyzer.analyzeFaceAndPose() 호출 중...")
         let (faceResult, poseResult) = analyzer.analyzeFaceAndPose(from: image)
-        print("🎯 분석 완료:")
-        print("   - 얼굴: \(faceResult != nil ? "✅ 검출됨" : "❌ 검출 안됨")")
-        print("   - 포즈: \(poseResult != nil ? "✅ 검출됨 (\(poseResult!.keypoints.count)개 키포인트)" : "❌ 검출 안됨")")
+        // print("🎯 분석 완료:")
+        // print("   - 얼굴: \(faceResult != nil ? "✅ 검출됨" : "❌ 검출 안됨")")
+        // print("   - 포즈: \(poseResult != nil ? "✅ 검출됨 (\(poseResult!.keypoints.count)개 키포인트)" : "❌ 검출 안됨")")
 
         if let pose = poseResult {
             let visibleCount = pose.keypoints.filter { $0.confidence >= 0.5 }.count
-            print("   - 포즈 신뢰도 ≥ 0.5: \(visibleCount)/\(pose.keypoints.count)개")
+            // print("   - 포즈 신뢰도 ≥ 0.5: \(visibleCount)/\(pose.keypoints.count)개")
         }
 
         // 🔥 디버그: 포즈 검출 실패 시 이미지 저장
@@ -572,7 +599,7 @@ class RealtimeAnalyzer: ObservableObject {
                 self?.cachedReference = cachedRef
             }
 
-            print("📦 v1.5 레퍼런스 캐시 완료: \(refId)")
+            // print("📦 v1.5 레퍼런스 캐시 완료: \(refId)")
         }
 
         // 🆕 35mm 환산 초점거리 추정 (EXIF → 뎁스맵 순서)
@@ -609,8 +636,8 @@ class RealtimeAnalyzer: ObservableObject {
             print("   - ⚠️ RTMPose 포즈 검출 실패")
         }
 
-        print("   - 밝기: \(brightness)")
-        print("   - 기울기: \(tiltAngle)도")
+        // print("   - 밝기: \(brightness)")
+        // print("   - 기울기: \(tiltAngle)도")
         print("========================================")
 
         // 메인 스레드에서 referenceAnalysis 및 referenceFocalLength 업데이트
@@ -635,7 +662,7 @@ class RealtimeAnalyzer: ObservableObject {
 
             self.referenceFocalLength = refFL
 
-            print("✅ 레퍼런스 분석 완료: UI 업데이트됨")
+            /* print("✅ 레퍼런스 분석 완료: UI 업데이트됨") */
         }
     }
 
@@ -680,11 +707,28 @@ class RealtimeAnalyzer: ObservableObject {
         lastAnalysisTime = Date()
         
         analysisQueue.async { [weak self] in
-            self?.analyzeFrameInternal(image, isFrontCamera: isFrontCamera, currentAspectRatio: currentAspectRatio)
+            self?.analyzeFrameInternal(image, isFrontCamera: isFrontCamera, currentAspectRatio: currentAspectRatio, brightness: nil)
         }
     }
 
-    private func analyzeFrameInternal(_ image: UIImage, isFrontCamera: Bool, currentAspectRatio: CameraAspectRatio) {
+    private func analyzeFrameInternal(_ image: UIImage, isFrontCamera: Bool, currentAspectRatio: CameraAspectRatio, brightness: Double?) {
+        // 🆕 Environment Check (Gate 0.5)
+        if let b = brightness, b < -2.0 {
+            DispatchQueue.main.async {
+                var newState = self.state
+                newState.environmentWarning = "너무 어두워요 💡"
+                newState.isPerfect = false
+                newState.stabilityProgress = 0.0
+                // Gate 평가 중단은 아니지만 경고 표시
+                self.state = newState
+            }
+            // 너무 어두우면 분석 중단? (사용자 경험상 계속 분석하는게 나을 수도 있지만, 정확도가 떨어짐)
+            // 여기서는 경고만 띄우고 분석은 진행 (단, 결과 신뢰도가 낮음)
+        } else {
+             // 경고 해제는 processAnalysisResult에서 처리 또는 state 업데이트 시
+             // 하지만 여기서 async로 해제하면 타이밍 이슈가 있을 수 있음.
+             // processAnalysisResult까지 전달해서 처리하는게 안전.
+        }
         // Safe check for reference
         guard let reference = referenceAnalysis else {
             DispatchQueue.main.async {
@@ -773,6 +817,9 @@ class RealtimeAnalyzer: ObservableObject {
             )]
             newState.perfectScore = 0.0
             newState.isPerfect = false
+            
+            // 🆕 No Face -> Reset All Gate Results (Prevent Stale State)
+            newState.gateEvaluation = nil 
             
             if self.state != newState {
                 self.state = newState
@@ -949,6 +996,9 @@ class RealtimeAnalyzer: ObservableObject {
                 // 🆕 35mm 환산 초점거리 계산
                 let currentFocalLength = self.focalLengthEstimator.focalLengthFromZoom(self.currentZoomFactor)
 
+                // 🆕 Adaptive Difficulty 적용
+                self.gateSystem.difficultyMultiplier = self.frustrationMultiplier
+
                 // 🔥 무거운 연산: Gate System 평가 (백그라운드에서)
                 evaluation = self.gateSystem.evaluate(
                     currentBBox: currentBBox,
@@ -988,17 +1038,42 @@ class RealtimeAnalyzer: ObservableObject {
                     // 히스테리시스 적용
                     for fb in gateFeedbacks {
                         self.feedbackHistory[fb.category, default: 0] += 1
+                    }
 
-                        if self.feedbackHistory[fb.category]! >= self.historyThreshold {
-                            stableFeedback.append(fb)
+                    // 히스테리시스 및 좌절 감지 (Adaptive Difficulty)
+                    if eval.allPassed {
+                        // 성공 시 난이도 및 타이머 리셋
+                        self.frustrationMultiplier = 1.0
+                        self.feedbackStartTimes.removeAll()
+                    } else {
+                        // 현재 주요 피드백 추적
+                        let primary = eval.primaryFeedback
+                        if self.feedbackStartTimes[primary] == nil {
+                            self.feedbackStartTimes[primary] = Date()
+                        } else if let startTime = self.feedbackStartTimes[primary], Date().timeIntervalSince(startTime) > self.frustrationThreshold {
+                            // 5초 이상 동일 피드백 -> 난이도 완화
+                            if self.frustrationMultiplier == 1.0 { // 아직 완화 안 된 상태면
+                                print("😤 좌절 감지! 난이도 완화 (Thresholds relax 1.2x)")
+                                self.frustrationMultiplier = 1.2
+                            }
                         }
                     }
 
-                    // 사라진 카테고리 히스토리 초기화
+                    for category in gateFeedbacks.map({ $0.category }) {
+                        if self.feedbackHistory[category]! >= self.historyThreshold {
+                            if let fb = gateFeedbacks.first(where: { $0.category == category }) {
+                                stableFeedback.append(fb)
+                            }
+                        }
+                    }
+                    
+                    // 사라진 카테고리 초기화
                     let currentCategories = Set(gateFeedbacks.map { $0.category })
-                    for (category, _) in self.feedbackHistory {
+                    for category in self.feedbackHistory.keys {
                         if !currentCategories.contains(category) {
                             self.feedbackHistory[category] = 0
+                            // 해결된 피드백의 타이머도 제거
+                            // (정확히 매핑하기 어려우면 전체 리셋하지 않고 유지하다가 주요 피드백 변경 시 처리됨)
                         }
                     }
 
@@ -1061,14 +1136,39 @@ class RealtimeAnalyzer: ObservableObject {
                 newState.perfectScore = score  // 조건 제거 (Equatable이 알아서 비교)
                 newState.categoryStatuses = categoryStatuses
 
-                // 완벽 프레임 카운트 업데이트
+                // 🆕 Phase 2: Temporal Lock Logic (State Machine)
+                var currentProgress: Float = 0.0
+                
                 if isCurrentlyPerfect {
-                    self.perfectFrameCount += 1
+                    switch self.stabilityState {
+                    case .idle:
+                        // 이제 막 완벽해짐 -> 타이머 시작
+                        self.stabilityState = .arming(startedAt: Date())
+                        currentProgress = 0.0
+                        
+                    case .arming(let startedAt):
+                        // 유지 중 -> 시간 계산
+                        let elapsed = Date().timeIntervalSince(startedAt)
+                        currentProgress = Float(min(elapsed / self.lockDuration, 1.0))
+                        
+                        if elapsed >= self.lockDuration {
+                            self.stabilityState = .locked
+                            currentProgress = 1.0
+                            // 📳 Haptic Logic could go here (Triggered once)
+                        }
+                        
+                    case .locked:
+                        // 이미 잠김 -> 유지
+                        currentProgress = 1.0
+                    }
                 } else {
-                    self.perfectFrameCount = 0
+                    // 조건 깨짐 -> 즉시 리셋
+                    self.stabilityState = .idle
+                    currentProgress = 0.0
                 }
 
-                newState.isPerfect = self.perfectFrameCount >= self.perfectThreshold
+                newState.stabilityProgress = currentProgress
+                newState.isPerfect = (self.stabilityState == .locked)
 
                 // 완료된 피드백: 변경사항이 있을 때만 업데이트
                 var updatedCompletedFeedbacks = newState.completedFeedbacks
