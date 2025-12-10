@@ -588,15 +588,26 @@ class CameraManager: NSObject, ObservableObject {
                 let maxPhoto = bestFormat.supportedMaxPhotoDimensions.last
                 print("✅ [설정됨] 포맷: Video=\(dim.width)x\(dim.height), Photo=\(maxPhoto?.width ?? 0)x\(maxPhoto?.height ?? 0)")
 
-                // 🔥 60fps 설정
+                // 🔥 60fps 설정 (안전하게 설정)
+                // 만약 60fps를 지원한다면 설정하고, 아니라면 최대 지원 FPS로 설정
                 if let maxFPSRange = bestFormat.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
-                    let targetFPS = min(maxFPSRange.maxFrameRate, 60.0)
-                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
-                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                    // 고해상도(4K 이상)에서는 60fps가 발열을 유발하거나 불안정할 수 있음 -> 30fps로 fallback 고려 가능
+                    // 여기서는 지원 범위 내에서만 안전하게 설정
+                    let safeMaxFPS = maxFPSRange.maxFrameRate
+                    let verifyFPS = (safeMaxFPS >= 59.0) ? 60.0 : 30.0
+                    
+                    // 실제 설정 (Range 체크)
+                    if safeMaxFPS >= verifyFPS {
+                        device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(verifyFPS))
+                        device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(verifyFPS))
+                        print("✅ [FPS 설정] Target: \(verifyFPS)fps (Max Support: \(safeMaxFPS))")
+                    } else {
+                        print("⚠️ [FPS 설정] 60fps 미지원 -> 기본값 유지 (Max: \(safeMaxFPS))")
+                    }
                 }
                 device.unlockForConfiguration()
             } catch {
-                print("❌ 포맷 설정 실패: \(error)")
+                print("❌ 포맷 설정 실패 (Fig Error 가능성): \(error)")
             }
         }
     }
