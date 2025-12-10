@@ -316,15 +316,23 @@ class CameraManager: NSObject, ObservableObject {
         pendingPauseWorkItem?.cancel()
         pendingPauseWorkItem = nil
 
-        guard !isSessionRunning else { return }
+        // 🔥 UI Guard 제거: 실제 세션 상태는 sessionQueue에서 확인해야 함 (Race Condition 방지)
+        // guard !isSessionRunning else { return } <--- 제거
+        
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
-            // 중복 실행 방지
+            
+            // 중복 실행 방지 (Serial Queue 내부에서 확인)
             guard !self.session.isRunning else {
+                print("⚠️ [CameraManager] Start requested but session is already running.")
                 DispatchQueue.main.async { self.isSessionRunning = true }
                 return
             }
+            
+            print("🚀 [CameraManager] calling session.startRunning()")
             self.session.startRunning()
+            print("✅ [CameraManager] session.startRunning() completed")
+            
             DispatchQueue.main.async { self.isSessionRunning = true }
         }
     }
@@ -333,10 +341,23 @@ class CameraManager: NSObject, ObservableObject {
         // 즉시 중지 (앱 종료 등)
         pendingPauseWorkItem?.cancel()
         
-        guard isSessionRunning else { return }
+        // 🔥 UI Guard 제거: UI 상태와 실제 세션 상태 불일치 방지
+        // guard isSessionRunning else { return } <--- 제거
+        
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
+            
+            // 실행 중이지 않은데 굳이 멈출 필요 없음 (단, 확실한 cleanup을 위해 체크)
+            guard self.session.isRunning else {
+                print("⚠️ [CameraManager] Stop requested but session is already stopped.")
+                DispatchQueue.main.async { self.isSessionRunning = false }
+                return
+            }
+            
+            print("🛑 [CameraManager] calling session.stopRunning()")
             self.session.stopRunning()
+            print("✅ [CameraManager] session.stopRunning() completed")
+            
             DispatchQueue.main.async { self.isSessionRunning = false }
         }
     }
