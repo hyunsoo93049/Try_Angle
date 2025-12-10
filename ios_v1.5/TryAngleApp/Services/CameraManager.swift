@@ -34,6 +34,9 @@ class CameraManager: NSObject, ObservableObject {
 
     // 🆕 현재 활성화된 물리 렌즈 (상태 표시용)
     @Published var currentLens: CameraLensType = .wide
+    
+    // 🆕 세션 설정 완료 상태 (Preview Layer 연결 타이밍 제어)
+    @Published var isSessionConfigured: Bool = false
 
     // 🆕 UI에 표시할 줌 버튼 리스트 (기기별 자동 생성)
     @Published var zoomButtons: [CGFloat] = [1.0]
@@ -77,11 +80,11 @@ class CameraManager: NSObject, ObservableObject {
     private var baseFocalLength35mm: CGFloat = 24.0
 
     // MARK: - Preview Layer
-    var previewLayer: AVCaptureVideoPreviewLayer {
+    lazy var previewLayer: AVCaptureVideoPreviewLayer = {
         let layer = AVCaptureVideoPreviewLayer(session: session)
         layer.videoGravity = .resizeAspect // 🔥 중요: Fill 대신 Aspect로 변경하여 4:3 전체 영역 표시 (WYSIWYG)
         return layer
-    }
+    }()
 
     // MARK: - Initialization
     override init() {
@@ -132,6 +135,7 @@ class CameraManager: NSObject, ObservableObject {
 
             // 🔥 설정 완료 후 콜백 호출
             DispatchQueue.main.async {
+                self.isSessionConfigured = true  // 🆕 Preview Layer 연결 허용
                 completion?()
             }
         }
@@ -316,15 +320,23 @@ class CameraManager: NSObject, ObservableObject {
         pendingPauseWorkItem?.cancel()
         pendingPauseWorkItem = nil
 
-        guard !isSessionRunning else { return }
+        // 🔥 UI Guard 제거: 실제 세션 상태는 sessionQueue에서 확인해야 함 (Race Condition 방지)
+        // guard !isSessionRunning else { return } <--- 제거
+        
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
-            // 중복 실행 방지
+            
+            // 중복 실행 방지 (Serial Queue 내부에서 확인)
             guard !self.session.isRunning else {
+                print("⚠️ [CameraManager] Start requested but session is already running.")
                 DispatchQueue.main.async { self.isSessionRunning = true }
                 return
             }
+            
+            print("🚀 [CameraManager] calling session.startRunning()")
             self.session.startRunning()
+            print("✅ [CameraManager] session.startRunning() completed")
+            
             DispatchQueue.main.async { self.isSessionRunning = true }
         }
     }
@@ -333,10 +345,23 @@ class CameraManager: NSObject, ObservableObject {
         // 즉시 중지 (앱 종료 등)
         pendingPauseWorkItem?.cancel()
         
-        guard isSessionRunning else { return }
+        // 🔥 UI Guard 제거: UI 상태와 실제 세션 상태 불일치 방지
+        // guard isSessionRunning else { return } <--- 제거
+        
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
+            
+            // 실행 중이지 않은데 굳이 멈출 필요 없음 (단, 확실한 cleanup을 위해 체크)
+            guard self.session.isRunning else {
+                print("⚠️ [CameraManager] Stop requested but session is already stopped.")
+                DispatchQueue.main.async { self.isSessionRunning = false }
+                return
+            }
+            
+            print("🛑 [CameraManager] calling session.stopRunning()")
             self.session.stopRunning()
+            print("✅ [CameraManager] session.stopRunning() completed")
+            
             DispatchQueue.main.async { self.isSessionRunning = false }
         }
     }
@@ -567,15 +592,26 @@ class CameraManager: NSObject, ObservableObject {
                 let maxPhoto = bestFormat.supportedMaxPhotoDimensions.last
                 print("✅ [설정됨] 포맷: Video=\(dim.width)x\(dim.height), Photo=\(maxPhoto?.width ?? 0)x\(maxPhoto?.height ?? 0)")
 
-                // 🔥 60fps 설정
+                // 🔥 60fps 설정 (안전하게 설정)
+                // 만약 60fps를 지원한다면 설정하고, 아니라면 최대 지원 FPS로 설정
                 if let maxFPSRange = bestFormat.videoSupportedFrameRateRanges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) {
-                    let targetFPS = min(maxFPSRange.maxFrameRate, 60.0)
-                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
-                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFPS))
+                    // 고해상도(4K 이상)에서는 60fps가 발열을 유발하거나 불안정할 수 있음 -> 30fps로 fallback 고려 가능
+                    // 여기서는 지원 범위 내에서만 안전하게 설정
+                    let safeMaxFPS = maxFPSRange.maxFrameRate
+                    let verifyFPS = (safeMaxFPS >= 59.0) ? 60.0 : 30.0
+                    
+                    // 실제 설정 (Range 체크)
+                    if safeMaxFPS >= verifyFPS {
+                        device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(verifyFPS))
+                        device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(verifyFPS))
+                        print("✅ [FPS 설정] Target: \(verifyFPS)fps (Max Support: \(safeMaxFPS))")
+                    } else {
+                        print("⚠️ [FPS 설정] 60fps 미지원 -> 기본값 유지 (Max: \(safeMaxFPS))")
+                    }
                 }
                 device.unlockForConfiguration()
             } catch {
-                print("❌ 포맷 설정 실패: \(error)")
+                print("❌ 포맷 설정 실패 (Fig Error 가능성): \(error)")
             }
         }
     }

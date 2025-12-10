@@ -1,17 +1,16 @@
 import SwiftUI
 import AVFoundation
+import UIKit
 
 struct CameraView: UIViewRepresentable {
     let cameraManager: CameraManager
+    let isSessionConfigured: Bool
+    let aspectRatio: CameraAspectRatio
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
+    func makeUIView(context: Context) -> CameraPreviewView {
+        let view = CameraPreviewView()
         view.backgroundColor = .black
-
-        let previewLayer = cameraManager.previewLayer
-        previewLayer.frame = view.bounds
-        view.layer.addSublayer(previewLayer)
-
+        
         // 핀치 제스처 (줌)
         let pinchGesture = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
         view.addGestureRecognizer(pinchGesture)
@@ -23,23 +22,62 @@ struct CameraView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            DispatchQueue.main.async {
-                previewLayer.frame = uiView.bounds
-                
-                // 16:9(Full Screen)일 때만 Fill로 설정하여 "확대된 느낌" 구현
-                if context.coordinator.cameraManager.aspectRatio == .ratio16_9 {
-                    previewLayer.videoGravity = .resizeAspectFill
-                } else {
-                    previewLayer.videoGravity = .resizeAspect
-                }
-            }
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        // Layer 연결 로직
+        if isSessionConfigured && uiView.previewLayer == nil {
+            let layer = cameraManager.previewLayer
+            uiView.setPreviewLayer(layer)
+            print("✅ [CameraView] Preview Layer 연결 (Custom View)")
         }
+        
+        // 화면비 업데이트
+        uiView.updateAspectRatio(aspectRatio)
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(cameraManager: cameraManager)
+    }
+
+    // MARK: - Internal Custom View (Layout Robustness)
+    class CameraPreviewView: UIView {
+        var previewLayer: AVCaptureVideoPreviewLayer?
+        
+        func setPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+            guard previewLayer == nil else { return } // 중복 추가 방지
+            
+            self.previewLayer = layer
+            layer.frame = bounds
+            layer.contentsGravity = .resizeAspect
+            layer.backgroundColor = UIColor.black.cgColor
+            layer.addSublayer(CALayer()) // Dummy to force layout? No.
+            
+            self.layer.insertSublayer(layer, at: 0)
+        }
+        
+        func updateAspectRatio(_ ratio: CameraAspectRatio) {
+            guard let layer = previewLayer else { return }
+            
+            let targetGravity: AVLayerVideoGravity = (ratio == .ratio16_9) ? .resizeAspectFill : .resizeAspect
+            
+            if layer.videoGravity != targetGravity {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                layer.videoGravity = targetGravity
+                CATransaction.commit()
+            }
+        }
+        
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            
+            // 🔥 핵심: 뷰 크기가 변할 때마다 무조건 레이어 프레임 동기화
+            if let layer = previewLayer {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                layer.frame = bounds
+                CATransaction.commit()
+            }
+        }
     }
 
     class Coordinator: NSObject {
@@ -65,17 +103,14 @@ struct CameraView: UIViewRepresentable {
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
-            guard let view = gesture.view else { return }
-            let point = gesture.location(in: view)
+            guard let view = gesture.view as? CameraPreviewView, 
+                  let previewLayer = view.previewLayer else { return }
             
-            // 프리뷰 레이어 좌표계로 변환 (0.0 ~ 1.0)
-            if let previewLayer = view.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-                let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
-                cameraManager.setFocus(at: devicePoint)
-                
-                // (선택 사항) 터치 이펙트 표시 로직을 여기에 추가할 수 있음
-                print("👆 Tap to Focus: \(devicePoint)")
-            }
+            let point = gesture.location(in: view)
+            let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: point)
+            
+            cameraManager.setFocus(at: devicePoint)
+            print("👆 Tap to Focus: \(devicePoint)")
         }
     }
 }
