@@ -17,6 +17,7 @@ struct AnalysisState: Equatable {
     var unifiedFeedback: UnifiedFeedback?
     var stabilityProgress: Float = 0.0 // 🆕 0.0 ~ 1.0 (Temporal Lock)
     var environmentWarning: String?      // 🆕 환경 경고 (너무 어두움 등)
+    var currentShotDebugInfo: String?    // 🆕 화면 표시용 샷타입 정보 (Debug Mode)
 }
 
 // MARK: - 실시간 분석을 위한 데이터 구조
@@ -69,7 +70,9 @@ class RealtimeAnalyzer: ObservableObject {
     var v15Feedback: String { state.v15Feedback }
     var unifiedFeedback: UnifiedFeedback? { state.unifiedFeedback }
     var stabilityProgress: Float { state.stabilityProgress }
+
     var environmentWarning: String? { state.environmentWarning }
+    var currentShotDebugInfo: String? { state.currentShotDebugInfo }
 
     // 🐛 ContentView에서 접근 가능하도ㄱ록 internal로 변경
     var referenceAnalysis: FrameAnalysis?
@@ -621,6 +624,11 @@ class RealtimeAnalyzer: ObservableObject {
         print("📸 레퍼런스 분석 최종 결과:")
         print("========================================")
         print("   - 비율: \(aspectRatio.displayName)")
+        if let refFraming = self.referenceFramingResult {
+            print("   - 📸 샷타입: \(refFraming.shotType.displayName)")
+        } else {
+            print("   - 📸 샷타입: 분석 실패 (키포인트 부족)")
+        }
         print("   - 얼굴: \(faceRect != nil ? "✅ 감지됨" : "❌ 없음")")
         print("   - 얼굴 각도: yaw=\(faceYaw ?? 0), pitch=\(facePitch ?? 0)")
         print("   - 카메라 앵글: \(cameraAngle.description)")
@@ -969,17 +977,7 @@ class RealtimeAnalyzer: ObservableObject {
             currentCompressionIndex = nil
         }
 
-        // 포즈 비교 (Gate 4용)
-        var poseComparison: PoseComparisonResult? = nil
-        if let refKeypoints = reference.poseKeypoints,
-           let curKeypoints = poseResult?.keypoints,
-           refKeypoints.count >= 133 && curKeypoints.count >= 133 {
 
-            poseComparison = poseComparator.comparePoses(
-                referenceKeypoints: refKeypoints,
-                currentKeypoints: curKeypoints
-            )
-        }
 
         // ✅ 무거운 연산을 백그라운드로 이동
         // 백그라운드에서 Gate System 평가 및 피드백 생성
@@ -992,6 +990,17 @@ class RealtimeAnalyzer: ObservableObject {
             }
             let referencePoseKeypoints: [PoseKeypoint]? = reference.poseKeypoints?.map { kp in
                 PoseKeypoint(location: kp.point, confidence: kp.confidence)
+            }
+
+            // 🚀 Optimization: Move Pose Comparison to Background
+            var poseComparison: PoseComparisonResult? = nil
+            if let refKeypoints = reference.poseKeypoints,
+               let curKeypoints = poseResult?.keypoints,
+               refKeypoints.count >= 133 && curKeypoints.count >= 133 {
+                poseComparison = self.poseComparator.comparePoses(
+                    referenceKeypoints: refKeypoints,
+                    currentKeypoints: curKeypoints
+                )
             }
 
             var stableFeedback: [FeedbackItem] = []
@@ -1034,9 +1043,19 @@ class RealtimeAnalyzer: ObservableObject {
                         isFrontCamera: isFrontCamera,
                         currentZoom: self.currentZoomFactor,
                         targetZoom: targetZoomValue,
-                        currentSubjectSize: currentBBox.width * currentBBox.height,
                         targetSubjectSize: cached.bbox.width * cached.bbox.height
                     )
+                    
+                    // 🆕 UI 표시용 Debug String (Gate 1 - Shot Type)
+                    // 🆕 UI 표시용 Debug String (Gate 1 - Shot Type)
+                    // (RealtimeAnalyzer.process 내에서 직접 할당)
+
+                    // 🔍 DEBUG: Unified Feedback Generation
+                    /*
+                    if let unified = unifiedFeedback {
+                         print("✨ Unified Feedback Generated: [\(unified.primaryAction.rawValue)] \(unified.mainMessage)")
+                    }
+                    */
 
                     // Gate System 피드백 생성
                     let gateFeedbacks = V15FeedbackGenerator.shared.generateFeedbackItems(from: eval)
@@ -1132,6 +1151,8 @@ class RealtimeAnalyzer: ObservableObject {
                 if let eval = evaluation {
                     newState.gateEvaluation = eval
                     newState.v15Feedback = eval.primaryFeedback
+                    // 🆕 샷타입 디버그 정보 전달
+                    newState.currentShotDebugInfo = eval.gate1.debugInfo
                 }
 
                 if let unified = unifiedFeedback {
@@ -1178,9 +1199,22 @@ class RealtimeAnalyzer: ObservableObject {
 
                 // 완료된 피드백: 변경사항이 있을 때만 업데이트
                 var updatedCompletedFeedbacks = newState.completedFeedbacks
+                
+                // 1. 새로 완료된 항목 추가
                 if !completedToAdd.isEmpty {
                     updatedCompletedFeedbacks.append(contentsOf: completedToAdd)
                 }
+                
+                // 2. 만약 현재 다시 발생한 피드백이 있다면, 완료 목록에서 제거 (User Request: 다시 피드백 시작)
+                // 현재 활성 피드백 ID 목록
+                let activeIds = Set(stableFeedback.map { $0.id })
+                if !activeIds.isEmpty {
+                    updatedCompletedFeedbacks.removeAll { completed in
+                        // 완료된 항목의 ID가 현재 활성 목록에 있다면 제거 (다시 문제 발생)
+                       activeIds.contains(completed.item.id)
+                    }
+                }
+                
                 updatedCompletedFeedbacks.removeAll { !$0.shouldDisplay }
                 newState.completedFeedbacks = updatedCompletedFeedbacks
 

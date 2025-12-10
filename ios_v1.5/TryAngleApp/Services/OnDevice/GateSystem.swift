@@ -102,14 +102,43 @@ enum ShotTypeGate: Int, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .extremeCloseUp: return "익스트림 클로즈업"
-        case .closeUp: return "클로즈업"
+        case .extremeCloseUp: return "초근접샷"
+        case .closeUp: return "얼굴샷"
         case .mediumCloseUp: return "바스트샷"
-        case .mediumShot: return "웨이스트샷"
-        case .americanShot: return "니샷"
-        case .mediumFullShot: return "미디엄 풀샷"
+        case .mediumShot: return "허리샷"
+        case .americanShot: return "허벅지샷"
+        case .mediumFullShot: return "무릎샷"
         case .fullShot: return "전신샷"
-        case .longShot: return "롱샷"
+        case .longShot: return "원거리 전신샷"
+        }
+    }
+    
+    // 🆕 v9: 피드백용 가이드 문구 (Target: 보이게 조정하세요)
+    // 🆕 v9: 피드백용 가이드 문구 (Target: 보이게 조정하세요)
+    var guideDescription: String {
+        switch self {
+        case .extremeCloseUp: return "이목구비가 꽉 차게"
+        case .closeUp: return "얼굴 전체가 나오게"
+        case .mediumCloseUp: return "가슴과 어깨까지 나오게"
+        case .mediumShot: return "허리까지 나오게"
+        case .americanShot: return "허벅지 중간까지 나오게"
+        case .mediumFullShot: return "무릎 아래까지 나오게"
+        case .fullShot: return "머리부터 발끝까지 전신이 나오게"
+        case .longShot: return "전신과 배경이 넓게 나오게"
+        }
+    }
+    
+    // 🆕 v9: 특징 부위 문구 (Current: ~가 보입니다/안 보입니다)
+    var featureDescription: String {
+        switch self {
+        case .extremeCloseUp: return "이목구비"
+        case .closeUp: return "얼굴"
+        case .mediumCloseUp: return "가슴/어깨"
+        case .mediumShot: return "허리"
+        case .americanShot: return "허벅지"
+        case .mediumFullShot: return "무릎"
+        case .fullShot: return "발/전신"
+        case .longShot: return "배경"
         }
     }
 
@@ -133,13 +162,26 @@ enum ShotTypeGate: Int, CaseIterable {
             return .mediumShot
         }
 
-        // Helper: Is Visible & Valid
-        func isVisible(_ idx: Int) -> Bool {
+        // Helper: Is Visible & Valid (Custom Threshold Support)
+        func isVisible(_ idx: Int, threshold: Float = confidenceThreshold) -> Bool {
             guard idx < keypoints.count else { return false }
             let kp = keypoints[idx]
-            return kp.confidence > confidenceThreshold &&
-                   kp.location.y >= 0.0 && kp.location.y <= 1.05 // 🔧 1.05: 약간 벗어난 것도 인정
+            return kp.confidence > threshold &&
+                   kp.location.y >= 0.0 && kp.location.y <= 1.05 
         }
+
+        // Visibility Checks (Stricter for Lower Body to prevent False Positives)
+        let strictThreshold: Float = 0.5
+        
+        let hasAnkles = isVisible(15, threshold: strictThreshold) || isVisible(16, threshold: strictThreshold)
+        
+        // Feet (17-22)
+        let hasFeet = keypoints.count > 22 && (17...22).contains(where: { isVisible($0, threshold: strictThreshold) })
+
+        let hasKnees = isVisible(13) || isVisible(14)
+        let hasHips = isVisible(11) || isVisible(12)
+        let hasElbows = isVisible(7) || isVisible(8)
+        let hasShoulders = isVisible(5) || isVisible(6)
         
         func getMaxY(_ indices: [Int]) -> CGFloat {
             return indices.compactMap { idx -> CGFloat? in
@@ -147,43 +189,41 @@ enum ShotTypeGate: Int, CaseIterable {
                 return keypoints[idx].location.y
             }.max() ?? 0.0
         }
-
-        // Visibility Checks
-        let hasAnkles = isVisible(15) || isVisible(16)
-        let hasKnees = isVisible(13) || isVisible(14)
-        let hasHips = isVisible(11) || isVisible(12)
-        let hasElbows = isVisible(7) || isVisible(8)
-        let hasShoulders = isVisible(5) || isVisible(6)
-        
-        // Feet (17-22)
-        let hasFeet = keypoints.count > 22 && (17...22).contains(where: { isVisible($0) })
         
         // Face Count
         let faceKeypointCount = keypoints.count > 90 ? (23...90).filter { isVisible($0) }.count : 0
         
-        // 🆕 Edge Heuristics (하단에 걸쳐있는지 확인)
+        // 🆕 Edge Heuristics
         let kneeMaxY = getMaxY([13, 14])
         let hipMaxY = getMaxY([11, 12])
         
-        let isKneesLow = kneeMaxY > 0.85
-        let isHipsLow = hipMaxY > 0.85
-        
-        // Decision Tree
+        // Decision Tree (More Precise)
         if hasAnkles || hasFeet {
             return .fullShot
         } else if hasKnees {
-            // 무릎이 보이는데 아주 낮게(0.85+) 있으면 정강이까지 보이는 셈 -> Medium Full Shot
-            return isKneesLow ? .mediumFullShot : .americanShot
+             // Knees visible -> Wider than American Shot (Mid-Thigh)
+             // If knees are very low (near bottom), it is Medium Full Shot (Shins/Knees)
+             return .mediumFullShot
         } else if hasHips {
-            // 골반이 보이는데 아주 낮게 있으면 허벅지까지 보이는 셈 -> American Shot 근접? (보수적으로 MediumShot 유지하되, Elbow 체크)
-            if hasElbows {
-                return .mediumShot
+            // Hips visible (Waist detected)
+            // Distinguish American (Mid-Thigh) vs Medium (Waist)
+            // Use Hip Y position:
+            // - If Hips are high (< 0.8), we see significant thigh -> American Shot
+            // - If Hips are low (> 0.8), we cut right below waist -> Medium Shot
+            
+            // 🔧 Use Hip MaxY and Sanity Check
+            if hipMaxY < 0.8 {
+                return .americanShot
             } else {
-                return .mediumCloseUp
+                return .mediumShot
             }
         } else if hasElbows {
+            // Elbows visible -> Chest/Bust visible -> Medium Close Up
+            // Check Shoulder Y for robustness?
             return .mediumCloseUp
         } else if hasShoulders {
+             // Shoulders visible but no elbows -> Tight bust or Close Up
+             // If face is dominant -> Close Up
             if faceKeypointCount > 50 {
                 return .closeUp
             } else {
@@ -213,6 +253,11 @@ class GateSystem {
     private var thresholds: GateThresholds {
         return baseThresholds.scaled(by: difficultyMultiplier)
     }
+
+    // 🆕 Debug State (User Request: Log only on change)
+    private var lastCurrentShotType: ShotTypeGate?
+    private var lastRefShotType: ShotTypeGate?
+    private var lastDebugLogTime: Date = Date()
 
     struct GateThresholds {
         let aspectRatio: CGFloat
@@ -354,28 +399,28 @@ class GateSystem {
         )
 
         // 🔧 DEBUG: Gate System Analysis Log (User Requested)
-        print("\n📊 [GateSystem Analysis] ------------------------------------------------")
+        // print("\n📊 [GateSystem Analysis] ------------------------------------------------")
         
         // 1. 샷 타입 비교 로그 (Gate 1)
-        print(gate1.debugDescription) // GateResult에 debugDescription 확장 필요 또는 직접 포맷팅
+        // print(gate1.debugDescription) // GateResult에 debugDescription 확장 필요 또는 직접 포맷팅
         
         // 2. 여백/구도 문제 로그 (Gate 2)
-        print(gate2.debugDescription)
+        // print(gate2.debugDescription)
         
         // 3. 전체 요약 및 "통과했지만 부족한 점"
-        print("   ----------------------------------------------------------------")
-        let scores = [gate0.score, gate1.score, gate2.score, gate3.score, gate4.score]
-        let currentOverallScore = scores.reduce(0, +) / CGFloat(scores.count)
-        print("   [Result] Overall Score: \(String(format: "%.1f", currentOverallScore * 100)) / 100")
+        // print("   ----------------------------------------------------------------")
+        // let scores = [gate0.score, gate1.score, gate2.score, gate3.score, gate4.score]
+        // let currentOverallScore = scores.reduce(0, +) / CGFloat(scores.count)
+        // print("   [Result] Overall Score: \(String(format: "%.1f", currentOverallScore * 100)) / 100")
         
         let gates = [gate0, gate1, gate2, gate3, gate4]
-        for (i, gate) in gates.enumerated() {
-            let status = gate.passed ? "✅ PASS" : "❌ FAIL"
-            // 통과했더라도 만점이 아니면 코멘트 표시
-            let comment = gate.passed && gate.score < 0.99 ? "(부족: \(gate.feedback))" : gate.feedback
-            print("   Gate \(i) [\(gate.name)]: \(status) (\(String(format: "%.0f%%", gate.score * 100))) - \(comment)")
-        }
-        print("--------------------------------------------------------------------------\n")
+        // for (i, gate) in gates.enumerated() {
+        //     let status = gate.passed ? "✅ PASS" : "❌ FAIL"
+        //     // 통과했더라도 만점이 아니면 코멘트 표시
+        //     let comment = gate.passed && gate.score < 0.99 ? "(부족: \(gate.feedback))" : gate.feedback
+        //     print("   Gate \(i) [\(gate.name)]: \(status) (\(String(format: "%.0f%%", gate.score * 100))) - \(comment)")
+        // }
+        // print("--------------------------------------------------------------------------\n")
 
         return GateEvaluation(gate0: gate0, gate1: gate1, gate2: gate2, gate3: gate3, gate4: gate4)
     }
@@ -415,6 +460,22 @@ class GateSystem {
         currentKeypoints: [PoseKeypoint]? = nil,      // 🆕 v6: 키포인트 기반 샷타입
         referenceKeypoints: [PoseKeypoint]? = nil     // 🆕 v6: 레퍼런스 키포인트
     ) -> GateResult {
+        // 🆕 v9.3: 인물 감지 실패 시 즉시 피드백 (Empty Air Problem 해결)
+        // 키포인트가 너무 적거나(5개 미만) 없고, BBox도 매우 작으면(0.01 미만) 인물 없음으로 간주
+        let hasSufficientKeypoints = (currentKeypoints?.count ?? 0) >= 5
+        let hasMeaningfulBBox = bbox.width * bbox.height > 0.01
+        
+        if !hasSufficientKeypoints && !hasMeaningfulBBox {
+            return GateResult(
+                name: "Framing",
+                score: 0.0,
+                threshold: 0.75,
+                feedback: "피사체를 인식할 수 없습니다. 화면 중앙에 인물을 비춰주세요.",
+                icon: "🕵️",
+                category: "framing",
+                debugInfo: "No Subject Detected"
+            )
+        }
 
         // 🆕 v6: 키포인트 기반 샷타입 우선 사용 (Python framing_analyzer.py 로직)
         let currentShotType: ShotTypeGate
@@ -468,21 +529,49 @@ class GateSystem {
             let shotTypeDist = currentShotType.distance(to: refShotType)
             shotTypeDistVal = shotTypeDist
 
-            // 🔧 점수 = 샷타입만으로 계산 (점유율 제외!)
-            // 거리 1 = 인접 샷타입 -> 기존 0.85(Pass)에서 0.6(Fail)로 변경하여 정밀도 향상
-            // 사용자 피드백: "안 맞는데 체크됨" 방지
-            if shotTypeDist == 0 {
-                score = 1.0  // 완벽 일치
+            // 🔧 v9: 점수 기반이 아닌 '타입 분류별 평가' (User Request)
+            // 분류가 일치하지 않으면 무조건 Fail 처리.
+            // 단, 피드백 생성을 위해 거리는 계산함.
+            // 1. 크기 비율 계산 (Target Height / Current Height)
+            // bbox는 이미 정규화되어 있음(0~1)
+            let currentHeight = bbox.height
+            let targetHeight = refBBox.height
+            let sizeRatio = targetHeight / max(currentHeight, 0.01)
+
+            // 🔧 v9: 점수 기반이 아닌 '타입 분류별 평가' (User Request)
+            // 분류가 일치하지 않으면 무조건 Fail 처리.
+            // 단, 피드백 생성을 위해 거리는 계산함.
+            
+            // 🆕 v9.1: 샷타입이 같아도 크기 차이가 크면 Fail 처리 (User Feedback 반영)
+            // 예: 같은 '허벅지샷'이라도 한 걸음 차이 날 수 있음.
+            let sizeDiffThreshold: CGFloat = 1.3 // 30% 이상 차이나면 피드백 제공 (0.7 ~ 1.3 허용)
+            
+            if currentShotType == refShotType {
+                if sizeRatio > sizeDiffThreshold {
+                    // 목표가 더 큼 -> 다가가야 함
+                    score = 0.6 // Fail (Threshold 0.75)
+                    let stepText = sizeRatio > 1.5 ? "한 걸음" : "반 걸음"
+                    let actionText = isFrontCamera ? "카메라를 가까이 하세요" : "앞으로 다가가세요"
+                    feedback = "조금 더 크게! \(stepText) \(actionText)"
+                    
+                } else if sizeRatio < (1.0 / sizeDiffThreshold) {
+                    // 목표가 더 작음 -> 물러나야 함
+                    score = 0.6 // Fail
+                    let stepText = sizeRatio < 0.6 ? "한 걸음" : "반 걸음"
+                    let actionText = isFrontCamera ? "카메라를 멀리 하세요" : "뒤로 물러나세요"
+                    feedback = "조금 더 작게! \(stepText) \(actionText)"
+                    
+                } else {
+                    score = 1.0  // ✅ 진짜 일치 (Pass)
+                    feedback = "✓ 샷타입 OK (\(currentShotType.displayName))"
+                }
             } else {
-                // 인접 샷타입(1)이라도 불일치로 간주하고 가이드 제공
-                // 점수: 0.6 (Threshold 0.75 미만 -> Fail)
-                score = max(0.3, 1.0 - CGFloat(shotTypeDist) * 0.4)
+                score = 0.4  // ❌ 불일치 (Fail) - 거리와 상관없이 불일치면 통과 기준 미달 처리
             }
 
             // 🆕 너무 가까워서 잘린 경우 특별 처리
             if isTooCloseAndCropped {
-                score = max(0.3, score - 0.2)  // 🔧 감점 완화 (0.3 → 0.2)
-
+                score = max(0.2, score - 0.2)
                 var croppedParts: [String] = []
                 if isAtTopEdge { croppedParts.append("상단") }
                 if isAtBottomEdge { croppedParts.append("하단") }
@@ -491,38 +580,49 @@ class GateSystem {
                 let croppedDesc = croppedParts.joined(separator: "/")
 
                 feedback = isFrontCamera
-                    ? "너무 가까워요! \(croppedDesc)이 잘렸어요. 뒤로 물러나세요"
-                    : "피사체가 너무 가까워요! \(croppedDesc)이 잘렸어요. 뒤로 가세요"
+                    ? "너무 가까워요! \(croppedDesc)이 잘렸습니다. (\(refShotType.guideDescription))"
+                    : "피사체가 너무 가까워요! \(croppedDesc)이 잘렸습니다. (\(refShotType.guideDescription))"
             }
-            // 🔧 샷타입 거리 1 이상이면 피드백 제공 (점수 0.6 Fail 대응)
-            else if shotTypeDist >= 1 {
-                let steps = max(1, shotTypeDist)
-                let isMinor = shotTypeDist == 1
-                let prefix = isMinor ? "아주 조금만" : "약 \(steps)걸음"
-
-                if currentShotType.rawValue > refShotType.rawValue {
-                    // 현재가 더 넓음 (전신) → 가까이
-                    feedback = isFrontCamera
-                        ? "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 앞으로"
-                        : "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 가까이"
+            // 🆕 v9: 샷타입 불일치 피드백 개선 (User Idea: Anatomical Guide + Reason + Direction + Steps)
+            // 예: "허벅지샷을 위해 두 걸음 앞으로 다가가세요"
+            else if score <= 0.4 && shotTypeDist >= 1 { // matched but size diff (score 0.6) is handled above. This is for distinct types.
+                
+                var stepText = ""
+                var actionText = ""
+                
+                if sizeRatio > 1.0 {
+                    // 현재가 목표보다 작음 (Target=0.5, Curr=0.25 -> Ratio=2.0) -> 다가가야 함
+                    if sizeRatio > 1.8 { stepText = "두 걸음" }
+                    else if sizeRatio > 1.3 { stepText = "한 걸음" }
+                    else { stepText = "반 걸음" }
+                    
+                    actionText = isFrontCamera ? "카메라를 가까이 하세요" : "앞으로 다가가세요"
                 } else {
-                    // 현재가 더 좁음 (클로즈업) → 뒤로
-                    feedback = isFrontCamera
-                        ? "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 뒤로"
-                        : "\(currentShotType.displayName) → \(refShotType.displayName). \(prefix) 뒤로"
+                    // 현재가 목표보다 큼 (Target=0.5, Curr=1.0 -> Ratio=0.5) -> 물러나야 함
+                    if sizeRatio < 0.55 { stepText = "두 걸음" }
+                    else if sizeRatio < 0.75 { stepText = "한 걸음" }
+                    else { stepText = "반 걸음" }
+                    
+                    actionText = isFrontCamera ? "카메라를 멀리 하세요" : "뒤로 물러나세요"
                 }
+                
+                // 2. 피드백 구성
+                // "허벅지샷을 위해 [두 걸음] [앞으로 다가가세요]"
+                // UnifiedFeedbackGenerator가 '앞으로/뒤로' 키워드 인식
+                let targetName = refShotType.displayName
+                feedback = "\(targetName)을 위해 \(stepText) \(actionText)"
             }
-            // 🔧 샷타입 OK (거리 0~1) → 세부 조정은 Gate 2에서 처리
-            else {
-                feedback = "✓ 샷타입 OK (\(currentShotType.displayName))"
+            // 🔧 샷타입 OK (위에서 처리됨, but catch-all for existing logic flow if needed)
+            else if feedback.isEmpty {
+                 feedback = "✓ 샷타입 OK (\(currentShotType.displayName))"
             }
         } else {
             // 절대 평가: 이상적 점유율 25%~50%
             if currentCoverage < 0.20 {
                 score = currentCoverage / 0.20
                 feedback = isFrontCamera
-                    ? "인물이 너무 작아요. 앞으로 다가오세요"
-                    : "인물이 너무 작아요. 카메라를 더 가까이 하세요"
+                    ? "인물이 너무 작아요. 카메라를 가까이 하세요"
+                    : "인물이 너무 작아요. 앞으로 다가가세요"
             } else if currentCoverage > 0.55 {
                 score = max(0, 1.0 - (currentCoverage - 0.55) / 0.3)
                 feedback = isFrontCamera
@@ -533,6 +633,41 @@ class GateSystem {
 
         
         let debugInfoText = "Shot: \(currentShotType.displayName) vs Ref: \(refShotTypeStr ?? "None") (Dist: \(shotTypeDistVal ?? -1))"
+
+        // 🆕 v9 Debug: 샷타입 변경 시에만 로그 출력 (User Request) → 🔧 Restore for Debugging
+        // 성능 이슈 방지를 위해 0.5초 스로틀링 (User Request: 보고 싶음)
+        let now = Date()
+        if now.timeIntervalSince(lastDebugLogTime) > 0.5 {
+             print("📸 [ShotType] Cur: \(currentShotType.displayName) | Ref: \(refShotTypeStr ?? "N/A") | Fdbk: \(feedback)")
+             lastDebugLogTime = now
+        }
+
+        // ============================================
+        // 🏁 Gate 1 결과 반환 (Debug Info 포함)
+        // ============================================
+        // 🔧 디버그 정보를 UI에 표시하기 위해 정제된 문자열 전달
+        let uiDebugInfo = "현재: \(currentShotType.displayName) vs 목표: \(refShotTypeStr ?? "분석 중")"
+        
+        return GateResult(
+            name: "Framing",
+            score: score,
+            threshold: 0.75, // 점수 기반이 아닌 논리 기반 Pass/Fail
+            feedback: feedback,
+            icon: "📐",
+            category: "framing",
+            debugInfo: uiDebugInfo // 🆕 UI용 디버그 문자열
+        )
+
+        
+        // Check if changed
+        let isCurrentChanged = currentShotType != lastCurrentShotType
+        
+        if isCurrentChanged, now.timeIntervalSince(lastDebugLogTime) > 0.2 {
+             print("📸 [ShotType] \(currentShotType.displayName) (Target: \(refShotTypeStr ?? "N/A"))")
+             lastCurrentShotType = currentShotType
+             // Ref tracking might be tricky due to scope, but tracking current is most important
+             lastDebugLogTime = now
+        }
 
         return GateResult(
             name: "프레이밍",
@@ -1062,7 +1197,7 @@ class GateSystem {
         }
 
         // 🆕 항상 디버그 출력
-        print("📐 [압축감(\(ref.source))] 현재:\(currentMM)mm vs 목표:\(refMM)mm → 점수:\(String(format: "%.2f", score))")
+        // print("📐 [압축감(\(ref.source))] 현재:\(currentMM)mm vs 목표:\(refMM)mm → 점수:\(String(format: "%.2f", score))")
 
         return GateResult(
             name: "압축감",

@@ -8,7 +8,9 @@ struct FeedbackOverlay: View {
     let gateEvaluation: GateEvaluation?  // 🆕 Gate System 평가 결과
     let unifiedFeedback: UnifiedFeedback?  // 🆕 통합 피드백 (하나의 동작 → 여러 Gate 해결)
     let stabilityProgress: Float  // 🆕 0.0 ~ 1.0 (Temporal Lock 진행도)
+
     let environmentWarning: String?  // 🆕 환경 경고 (너무 어두움 등)
+    let currentShotDebugInfo: String? // 🆕 화면 표시용 샷타입 정보 (Debug Mode)
 
     var body: some View {
         let _ = {
@@ -62,10 +64,30 @@ struct FeedbackOverlay: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color.black.opacity(0.6))
+                        .background(Color.black.opacity(0.6))
                         .cornerRadius(8)
                 }
                 .padding(.top, 60)
                 .padding(.trailing, 16)
+                
+                // 🆕 상단 중앙: 샷타입 비교 가이드 (Debug Info)
+                // 디버그 로그를 정제하여 UI로 표시
+                if let debugInfo = currentShotDebugInfo {
+                    HStack {
+                        Spacer()
+                        Text(debugInfo)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.yellow) // 눈에 띄게 표시
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.7)) // 가독성 확보
+                            .cornerRadius(12)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.yellow.opacity(0.5), lineWidth: 1))
+                        Spacer()
+                    }
+                    .padding(.top, 108) // 처리 시간 아래쪽
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 Spacer()
 
@@ -624,7 +646,8 @@ struct FeedbackOverlay_Previews: PreviewProvider {
                     priority: 1
                 ),
                 stabilityProgress: 0.5,
-                environmentWarning: nil
+                environmentWarning: nil,
+                currentShotDebugInfo: "현재: 전신샷 vs 목표: 허벅지샷"
             )
 
             // 기존 Gate 피드백 미리보기
@@ -650,7 +673,8 @@ struct FeedbackOverlay_Previews: PreviewProvider {
                 gateEvaluation: nil,
                 unifiedFeedback: nil,
                 stabilityProgress: 0.0,
-                environmentWarning: "너무 어두워요 💡"
+                environmentWarning: "너무 어두워요 💡",
+                currentShotDebugInfo: nil
             )
         }
         .background(Color.black)

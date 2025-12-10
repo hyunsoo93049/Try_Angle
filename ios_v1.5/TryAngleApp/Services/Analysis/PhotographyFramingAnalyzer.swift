@@ -52,14 +52,16 @@ struct KeypointIndex {
 
 // MARK: - 샷 타입 (사진학 기준)
 enum ShotType: String, CaseIterable {
-    case extremeCloseUp = "익스트림 클로즈업"  // 눈, 입 등 특정 부위만
-    case closeUp = "클로즈업"                 // 얼굴 중심
-    case mediumCloseUp = "미디엄 클로즈업"    // 어깨선 위
-    case mediumShot = "미디엄샷"              // 허리 위 (바스트샷)
-    case americanShot = "아메리칸샷"          // 무릎 위 (카우보이샷)
-    case mediumFullShot = "미디엄 풀샷"       // 무릎~발목
-    case fullShot = "풀샷"                   // 전신
-    case longShot = "롱샷"                   // 전신 + 환경
+    case extremeCloseUp = "초근접샷"
+    case closeUp = "얼굴샷"
+    case mediumCloseUp = "바스트샷"
+    case mediumShot = "허리샷"
+    case americanShot = "허벅지샷"
+    case mediumFullShot = "무릎샷"
+    case fullShot = "전신샷"
+    case longShot = "원거리 전신샷"
+    
+    var displayName: String { return self.rawValue }
 
     /// 사용자 친화적인 설명
     var userFriendlyDescription: String {
@@ -320,6 +322,9 @@ class PhotographyFramingAnalyzer {
         let hasFeet = (keypoints[KeypointIndex.leftFootStart].confidence > confidenceThreshold ||
                       keypoints[KeypointIndex.rightFootStart].confidence > confidenceThreshold)
 
+        /// 키포인트 가시성을 기반으로 샷 타입 결정
+    /// - Returns: 결정된 샷 타입
+
         // 얼굴 크기로 보완
         let faceSize = calculateFaceSize(keypoints: keypoints)
 
@@ -364,6 +369,45 @@ class PhotographyFramingAnalyzer {
         }
 
         return (shotType, confidence)
+    }
+
+    /// 키포인트 가시성을 기반으로 샷 타입 결정 (Static Helper)
+    /// - Returns: 결정된 샷 타입
+    static func determineShotType(from keypoints: [PoseKeypoint]) -> ShotType {
+        let isVisible = { (idx: Int) -> Bool in
+            guard idx < keypoints.count else { return false }
+            return keypoints[idx].confidence > 0.4 // 임계값 상향
+        }
+        
+        let hasFeet = (15...22).contains { isVisible($0) }
+        let hasKnees = isVisible(13) || isVisible(14)
+        let hasHips = isVisible(11) || isVisible(12)
+        let hasShoulders = isVisible(5) || isVisible(6)
+        let hasFace = isVisible(0) // 코
+        
+        // 🔍 DEBUG: Visibility Check
+        // print("[Analyzer] Vis: Face=\(hasFace), Shol=\(hasShoulders), Hips=\(hasHips), Knees=\(hasKnees), Feet=\(hasFeet)")
+
+        if hasFeet {
+            return .fullShot
+        } else if hasKnees {
+             // 무릎이 보이지만 발은 안 보임 -> 무릎샷 or 허벅지샷
+             // 무릎의 Y 위치가 화면 하단(0.85 이상)에 있으면 무릎샷(Medium Full)
+             // 무릎이 더 위쪽이면 허벅지샷일 수 있음 (하지만 안정성을 위해 무릎 보이면 MediumFull)
+             return .mediumFullShot
+        } else if hasHips {
+            // 골반은 보이지만 무릎은 안 보임 -> 허벅지샷 (American) or 허리샷 (Medium)
+            // 골반 위치가 하단이면 허벅지샷
+            return .americanShot
+        } else if hasShoulders {
+            // 어깨는 보임 -> 바스트샷 or 허리샷
+            // 어깨 아래로 여유가 많으면 허리샷
+            return .mediumShot
+        } else if hasFace {
+            return .closeUp
+        } else {
+            return .extremeCloseUp
+        }
     }
 
     // MARK: - 헤드룸 계산

@@ -291,7 +291,14 @@ class UnifiedFeedbackGenerator {
     ) -> UnifiedFeedback? {
 
         // Gate 1, 2만 분석 (Gate 3 압축감은 OK이므로 제외)
-        let problems = analyzeProblems(from: evaluation).filter { $0.gateIndex >= 1 && $0.gateIndex <= 2 }
+        var problems = analyzeProblems(from: evaluation).filter { $0.gateIndex >= 1 && $0.gateIndex <= 2 }
+
+        // 🆕 Gate 1 우선 법칙 (Sequential Feedback)
+        // 샷타입(Gate 1)이 틀리면 위치(Gate 2) 피드백은 무시한다.
+        // 이유: 거리를 맞추느라 위치가 어차피 변하기 때문.
+        if problems.contains(where: { $0.gateIndex == 1 }) {
+            problems = problems.filter { $0.gateIndex == 1 }
+        }
 
         if problems.isEmpty {
             lastFeedback = nil
@@ -585,15 +592,17 @@ class UnifiedFeedbackGenerator {
         // ⚠️ "가까이 가세요"와 혼동 방지: "가까워요"는 "뒤로", "가까이"는 "앞으로"
         let needsBackward = feedback.contains("뒤로") ||
                             feedback.contains("물러") ||
-                            feedback.contains("작게") ||
-                            feedback.contains("가까워요") ||  // 🔧 "너무 가까워요" 처리
+                            feedback.contains("작게") || feedback.contains("조금 더 작게") || // 🔧 "조금 더 작게"
+                            feedback.contains("멀리") ||       // 🔧 "멀리 하세요"
+                            feedback.contains("가까워요") ||
                             feedback.contains("너무 가까") ||
-                            feedback.contains("잘렸어요")      // 🔧 잘림 = 뒤로 가야 함
+                            feedback.contains("잘렸어요")
 
         let needsForward = feedback.contains("앞으로") ||
                            feedback.contains("가까이 가") ||   // 🔧 더 구체적: "가까이 가세요"
                            feedback.contains("가까이 하") ||   // 🔧 "가까이 하세요"
-                           feedback.contains("더 크게") ||
+                           feedback.contains("다가가") ||      // 🔧 "다가가세요"
+                           feedback.contains("더 크게") ||     // 🔧 "조금 더 크게"
                            feedback.contains("작아요")         // 🔧 "인물이 너무 작아요"
 
         // 🔧 핵심: needsBackward와 needsForward가 둘 다 true일 때
